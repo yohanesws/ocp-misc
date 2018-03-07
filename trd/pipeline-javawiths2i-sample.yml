@@ -1,0 +1,105 @@
+apiVersion: v1
+kind: BuildConfig
+metadata:
+  creationTimestamp: '2018-03-06T05:11:43Z'
+  labels:
+    app: generic-pipeline-custom
+    name: poc-nodejs
+  name: poc-nodejs
+  namespace: cicd
+  resourceVersion: '1440442'
+  selfLink: /oapi/v1/namespaces/cicd/buildconfigs/poc-nodejs
+  uid: dc17618d-20fc-11e8-9c9b-005056b116ba
+spec:
+  nodeSelector: null
+  output: {}
+  postCommit: {}
+  resources: {}
+  runPolicy: Serial
+  source:
+    type: None
+  strategy:
+    jenkinsPipelineStrategy:
+      jenkinsfile: |-
+        try {
+                     timeout(time: 20, unit: 'MINUTES') {
+                        def appName="pocnodejs"
+                        def projectDev="poc-dev"
+                        def projectAlpha="poc-alpha"
+                        def projectProd="poc-prod"
+                        def projectCicd="cicd"
+                        def gitRepo="http://git.dmp.true.th/DMP-DevOps/POC-Sample-NodeJS.git"
+                        def nonProdRepo="docker-registry-default.os2-np.dmp.true.th"
+
+                        node {
+                          stage("Build Image") {
+                            sh "oc login ose2-np.dmp.true.th:8443 --insecure-skip-tls-verify --token=eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJrdWJlcm5ldGVzL3NlcnZpY2VhY2NvdW50Iiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9uYW1lc3BhY2UiOiJjaWNkIiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9zZWNyZXQubmFtZSI6ImplbmtpbnMtdG9rZW4tMnQ1cnIiLCJrdWJlcm5ldGVzLmlvL3NlcnZpY2VhY2NvdW50L3NlcnZpY2UtYWNjb3VudC5uYW1lIjoiamVua2lucyIsImt1YmVybmV0ZXMuaW8vc2VydmljZWFjY291bnQvc2VydmljZS1hY2NvdW50LnVpZCI6IjU4ZDEyNWNkLTIwMmItMTFlOC1iZWMzLTAwNTA1NmIxMTZiYSIsInN1YiI6InN5c3RlbTpzZXJ2aWNlYWNjb3VudDpjaWNkOmplbmtpbnMifQ.vRhK2yNCbO2ybO1aUTTdKCwCXmOU4yrs17MCi9ZqodI3p34jnLAzC7XZGQPGkWtTgpPiT5rOyDsXEI9C4v0JUThVw7g0myyFPhZpC4jJEWzF1cEeDw4Z1dd-F-vwz2kCs2fof-Zi7hD_aV86QAVjik9KkBN_46OR7h2zP857Fc2-oqs63XSKOXE8tYauqUSSg9CBxUNbUsUxqiRZ15awUXgvbnNPCEWaLF4YLQ4luHSDksVKPXOkhvnOIHzfnCHVqzIo7B8WSVq2miyG2bH2xMEluA9EOJzKyllQd_PPnYqC3QsW6tFxwVi7ww12l8TyIptjX4AEkcCxGDKhgJKHQQ"
+                            sh "oc project ${projectDev}"
+                            sh "oc process openshift//generic-docker-build APP_NAME=${appName} GIT_SOURCE_URL=${gitRepo} GIT_SOURCE_REF=master OPENSHIFT_SECRET_NAME=true-gitlab | oc create -f - || true"
+                            sh "oc start-build ${appName} -n ${projectDev}"
+                            openshiftVerifyBuild bldCfg: "${appName}", namespace: "${projectDev}", waitTime: '20', waitUnit: 'min'
+                          }
+                          stage("Deploy Dev") {
+                             // clean up. keep the image stream
+                            sh "oc delete dc,svc,route -l app=${appName} -n ${projectDev}"
+                            sh "oc new-app ${appName} -n ${projectDev} || true"
+                            openshiftVerifyDeployment depCfg: "${appName}", namespace: "${projectDev}", waitTime: '5', waitUnit: 'min'
+                            sh "oc expose svc/${appName} -n ${projectDev}"
+                          }
+                          stage ('Deploy ALPHA') {
+                             timeout(time:10, unit:'MINUTES') {
+                                // input message: "Promote to ALPHA?", ok: "Promote", submitter: '"CN=Tumanoon Punjansing,OU=Employees,DC=true,DC=care"'
+                                input message: "Promote to ALPHA?", ok: "Promote"
+                             }
+                             
+                             // tag for stage
+                             sh "oc tag ${projectDev}/${appName}:latest ${projectAlpha}/${appName}:alpha"
+                             // clean up. keep the imagestream
+                             sh "oc delete bc,dc,svc,route -l app=${appName} -n ${projectAlpha}"
+                             // deploy stage image
+                             sh "oc new-app ${appName}:alpha --name=${appName} -n ${projectAlpha}"
+                             openshiftVerifyDeployment depCfg: "${appName}", namespace: "${projectAlpha}", waitTime: '5', waitUnit: 'min'
+                             sh "oc expose svc/${appName} -n ${projectAlpha}"
+                          }
+                        //   stage ('Promote Image to Prod') {
+                             
+                             //sh "oc project ${projectCicd}"
+                             //sh "oc delete bc ${appName}-push -n ${projectCicd}"
+                             // create build for help push to prod registry
+                             //sh "oc process extregistry-push BUILD_NAME=${appName}-push SOURCE_NAMESPACE=${projectAlpha} SOURCE_IMAGE_NAME=${appName} SOURCE_IMAGE_VERSION=alpha OUTPUT_REGISTRY=docker-registry-default.os2.dmp.true.th/poc-proc OUTPUT_IMAGE_NAME=${appName} OUTPUT_IMAGE_VERSION=prod PUSH_SECRET=prod-registry | oc create -f - || true"
+                             //sh "oc start-build ${appName}-push -n ${projectCicd}"
+                             //openshiftVerifyBuild bldCfg: "${appName}-push", namespace: "${projectCicd}", waitTime: '20', waitUnit: 'min'
+                            //  sh "docker login -u jenkins -p eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJrdWJlcm5ldGVzL3NlcnZpY2VhY2NvdW50Iiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9uYW1lc3BhY2UiOiJjaWNkIiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9zZWNyZXQubmFtZSI6ImplbmtpbnMtdG9rZW4tMnQ1cnIiLCJrdWJlcm5ldGVzLmlvL3NlcnZpY2VhY2NvdW50L3NlcnZpY2UtYWNjb3VudC5uYW1lIjoiamVua2lucyIsImt1YmVybmV0ZXMuaW8vc2VydmljZWFjY291bnQvc2VydmljZS1hY2NvdW50LnVpZCI6IjU4ZDEyNWNkLTIwMmItMTFlOC1iZWMzLTAwNTA1NmIxMTZiYSIsInN1YiI6InN5c3RlbTpzZXJ2aWNlYWNjb3VudDpjaWNkOmplbmtpbnMifQ.vRhK2yNCbO2ybO1aUTTdKCwCXmOU4yrs17MCi9ZqodI3p34jnLAzC7XZGQPGkWtTgpPiT5rOyDsXEI9C4v0JUThVw7g0myyFPhZpC4jJEWzF1cEeDw4Z1dd-F-vwz2kCs2fof-Zi7hD_aV86QAVjik9KkBN_46OR7h2zP857Fc2-oqs63XSKOXE8tYauqUSSg9CBxUNbUsUxqiRZ15awUXgvbnNPCEWaLF4YLQ4luHSDksVKPXOkhvnOIHzfnCHVqzIo7B8WSVq2miyG2bH2xMEluA9EOJzKyllQd_PPnYqC3QsW6tFxwVi7ww12l8TyIptjX4AEkcCxGDKhgJKHQQ -e jenkins@true.th docker-registry.default.svc:5000"
+                        //   }
+                          stage ('Deploy Prodution') {
+                             timeout(time:10, unit:'MINUTES') {
+                                input message: "Promote to Production?", ok: "Promote"
+                             }
+                             sh "oc login ose2.dmp.true.th:8443 --insecure-skip-tls-verify --token=eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJrdWJlcm5ldGVzL3NlcnZpY2VhY2NvdW50Iiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9uYW1lc3BhY2UiOiJjaWNkIiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9zZWNyZXQubmFtZSI6ImNsb3VkYXV0by10b2tlbi1kcTFydCIsImt1YmVybmV0ZXMuaW8vc2VydmljZWFjY291bnQvc2VydmljZS1hY2NvdW50Lm5hbWUiOiJjbG91ZGF1dG8iLCJrdWJlcm5ldGVzLmlvL3NlcnZpY2VhY2NvdW50L3NlcnZpY2UtYWNjb3VudC51aWQiOiI4ZWUxYTE2ZC0yMGVlLTExZTgtYjE0MC0wMDUwNTZiMWM1MGYiLCJzdWIiOiJzeXN0ZW06c2VydmljZWFjY291bnQ6Y2ljZDpjbG91ZGF1dG8ifQ.gPZ9a8CemVU3OoXU1rnll2KYdB2pCNBNi_dlSNz_bPF0ql6wgPon9dJFLZ3rncbJ6iZc21JQNhTouZeltgn0EvLjrEc4wMZJwS0YkZ3fzl0tPXpKYM3AZx7Xl_F_L38sPgL_hFevXppK95bMkneOW89Dc24vWX7WPxQ_3BfwGef6GY5ldbMl0l0sFL9MEhRezw_GD9iYqEevMgfndsBaTHlhGjMnyquFJ9R0tdcwxJIQxmH_7DwQUa-r_YdOb4Aot5qY0RVGrkpwr5eXPrdJtuCrvaalCanAKK4urH-gHKJwXo218LInIQUFCjJ9gCIFNtnkkWTv4P7YZ94oKOldZA"
+                             // clean up.
+                             sh "oc delete is,bc,dc,svc,route -l app=${appName} -n ${projectProd}"
+                             // import image
+                             sh "oc import-image ${appName}:prod --from=${nonProdRepo}/${projectAlpha}/${appName}:alpha --confirm -n ${projectProd}"
+                             // deploy prod image
+                             sh "oc new-app ${appName}:prod --name=${appName} -n ${projectProd}"
+                             openshiftVerifyDeployment depCfg: "${appName}", namespace: "${projectProd}", waitTime: '5', waitUnit: 'min'
+                             sh "oc expose svc/${appName} -n ${projectProd}"
+                          }
+                        }
+                     }
+                  } catch (err) {
+                     echo "in catch block"
+                     echo "Caught: ${err}"
+                     currentBuild.result = 'FAILURE'
+                     throw err
+                  }
+    type: JenkinsPipeline
+  triggers:
+    - github:
+        secret: VYhRbNeHlKlLsHPQbvm6E46sbjisQHVu3EYBWFyK
+      type: GitHub
+    - generic:
+        secret: u2mgkeb6MUFykBkpAEgiFthL1QC3HyFGN1brIQOg
+      type: Generic
+status:
+  lastVersion: 16

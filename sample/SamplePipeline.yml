@@ -1,0 +1,74 @@
+apiVersion: v1
+kind: BuildConfig
+metadata:
+  annotations:
+    pipeline.alpha.openshift.io/uses: '[{"name": "jenkins", "namespace": "", "kind": "DeploymentConfig"}]'
+  creationTimestamp: '2018-03-05T03:25:12Z'
+  labels:
+    app: cicd-pipeline
+    name: cicd-pipeline
+  name: tasks-pipeline
+  namespace: cicd
+  resourceVersion: '100633'
+  selfLink: /oapi/v1/namespaces/cicd/buildconfigs/tasks-pipeline
+  uid: d0c3c809-2024-11e8-bdda-b2b839abe656
+spec:
+  nodeSelector: null
+  output: {}
+  postCommit: {}
+  resources: {}
+  runPolicy: Serial
+  source:
+    type: None
+  strategy:
+    jenkinsPipelineStrategy:
+      jenkinsfile: |-
+        node('maven') {
+           // define commands
+           // def mvnCmd = "mvn -s configuration/cicd-settings.xml"
+           def mvnCmd = "mvn"
+           stage ('Build') {
+             git branch: 'eap-7', url: 'https://github.com/OpenShiftDemos/openshift-tasks'
+             sh "${mvnCmd} clean install -DskipTests=true"
+           }
+           stage ('Deploy DEV') {
+             sh "rm -rf oc-build && mkdir -p oc-build/deployments"
+             sh "cp target/openshift-tasks.war oc-build/deployments/ROOT.war"
+             // clean up. keep the image stream
+             sh "oc delete bc,dc,svc,route -l app=tasks -n eap-dev"
+             // create build. override the exit code since it complains about exising imagestream
+             sh "oc new-build --name=tasks --image-stream=jboss-eap70-openshift:1.5 --binary=true --labels=app=tasks -n eap-dev || true"
+             // build image
+             sh "oc start-build tasks --from-dir=oc-build --wait=true -n eap-dev"
+             // deploy image
+             sh "oc new-app tasks:latest -n eap-dev"
+             sh "oc expose svc/tasks -n eap-dev"
+           }
+           stage ('Deploy STAGE') {
+             timeout(time:5, unit:'MINUTES') {
+                input message: "Promote to STAGE?", ok: "Promote"
+             }
+             def v = version()
+             // tag for stage
+             sh "oc tag eap-dev/tasks:latest eap-stage/tasks:${v}"
+             // clean up. keep the imagestream
+             sh "oc delete bc,dc,svc,route -l app=tasks -n eap-stage"
+             // deploy stage image
+             sh "oc new-app tasks:${v} -n eap-stage"
+             sh "oc expose svc/tasks -n eap-stage"
+           }
+        }
+        def version() {
+          def matcher = readFile('pom.xml') =~ '<version>(.+)</version>'
+          matcher ? matcher[0][1] : null
+        }
+    type: JenkinsPipeline
+  triggers:
+    - github:
+        secret: '${WEBHOOK_SECRET}'
+      type: GitHub
+    - generic:
+        secret: '${WEBHOOK_SECRET}'
+      type: Generic
+status:
+  lastVersion: 7
