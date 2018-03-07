@@ -1,0 +1,76 @@
+apiVersion: v1
+kind: Template
+metadata:
+  name: extregistry-pull-template
+  annotations:
+    description: "Template for Pull Image to External Regisrty"
+    tags: "build,external,registry"
+objects:
+- apiVersion: v1
+  kind: BuildConfig
+  metadata:
+    labels:
+      build: ${BUILD_NAME}
+      builder: externalregistrypull
+    name: ${BUILD_NAME}
+  spec:
+    failedBuildsHistoryLimit: 1
+    nodeSelector: null
+    output:
+      pushSecret:
+        name: ${PUSH_SECRET}
+      to:
+        kind: ImageStreamTag
+        name: '${OUTPUT_IMAGE_NAME}:${OUTPUT_IMAGE_VERSION}'
+        namespace: ${OUTPUT_NAMESPACE}
+    postCommit: {}
+    resources: {}
+    runPolicy: Serial
+    strategy:
+      sourceStrategy:
+        from:
+         kind: DockerImage
+         name: '${SOURCE_REGISTRY}/${SOURCE_IMAGE_NAME}:${SOURCE_IMAGE_VERSION}'
+        pullSecret:
+          name: ${PUSH_SECRET}
+      type: Source
+    successfulBuildsHistoryLimit: 3
+    triggers:
+      - github:
+          secret: vVLMkPVM6eHrpDK1XzLb
+        type: GitHub
+      - generic:
+          secret: hHGYPLsIxUlAaud5Sh4g
+        type: Generic
+
+parameters:
+- description: Build Name
+  name: BUILD_NAME
+  required: true
+- description: Source Image Registry
+  name: SOURCE_REGISTRY
+  required: true
+- description: Source Image Name
+  name: SOURCE_IMAGE_NAME
+  required: true
+- description: Source Image Version
+  name: SOURCE_IMAGE_VERSION
+  required: true
+- description: Output Image Namespace or Project
+  name: OUTPUT_NAMESPACE
+  value: dev
+  required: true
+- description: Output Image Name
+  name: OUTPUT_IMAGE_NAME
+  required: true
+- description: Output Image Version
+  name: OUTPUT_IMAGE_VERSION
+  required: true
+- description: Pull Secret to use
+  name: PULL_SECRET
+  required: true
+- description: Push Secret to use
+  name: PUSH_SECRET
+  required: true
+labels:
+  builder: externalregistrypull

@@ -1,0 +1,82 @@
+apiVersion: v1
+kind: Template
+metadata:
+  name: extregistry-copy-template
+  annotations:
+    description: "Template for Copy Image to External Regisrty"
+    tags: "build,external,registry"
+objects:
+- apiVersion: v1
+  kind: BuildConfig
+  metadata:
+    labels:
+      build: ${BUILD_NAME}
+      builder: externalregistry
+    name: ${BUILD_NAME}
+  spec:
+    failedBuildsHistoryLimit: 1
+    nodeSelector: null
+    output:
+      pushSecret:
+        name: ${PUSH_SECRET}
+      to:
+        kind: DockerImage
+        name: '${OUTPUT_REGISTRY}/${OUTPUT_IMAGE_NAME}:${OUTPUT_IMAGE_VERSION}'
+    postCommit: {}
+    resources: {}
+    runPolicy: Serial
+    strategy:
+      sourceStrategy:
+        from:
+          kind: ImageStreamTag
+          name: '${SOURCE_IMAGE_NAME}:${SOURCE_IMAGE_VERSION}'
+          namespace: ${SOURCE_NAMESPACE}
+        pullSecret:
+          name: ${PUSH_SECRET}
+      type: Source
+    successfulBuildsHistoryLimit: 3
+    triggers:
+      - github:
+          secret: vVLMkPVM6eHrpDK1XzLb
+        type: GitHub
+      - generic:
+          secret: hHGYPLsIxUlAaud5Sh4g
+        type: Generic
+parameters:
+- description: Build Name
+  name: BUILD_NAME
+  required: true
+- description: Source Image Namespace or Project
+  name: SOURCE_NAMESPACE
+  value: dev
+  required: true
+- description: Source Image Name
+  name: SOURCE_IMAGE_NAME
+  value: usercount
+  required: true
+- description: Source Image Version
+  name: SOURCE_IMAGE_VERSION
+  value: latest
+  required: true
+- description: Output Image Registry
+  name: OUTPUT_REGISTRY
+  value: 10.197.26.119:8083/dev
+  required: true
+- description: Output Image Name
+  name: OUTPUT_IMAGE_NAME
+  value: usercount
+  required: true
+- description: Output Image Version
+  name: OUTPUT_IMAGE_VERSION
+  value: latest
+  required: true
+- description: Pull Secret to use
+  name: PULL_SECRET
+  value: default-dockercfg-8bjts
+  required: true
+- description: Push Secret to use
+  name: PUSH_SECRET
+  value: nexus-unsecure-registry-cred
+  required: true
+labels:
+  builder: externalregistry
