@@ -11,6 +11,11 @@ parameters:
   displayName: Source URL
   required: true
   value: https://github.com/openshift/openshift-jee-sample.git
+- name: DOCKERFILE_PATH
+  description: The Docker File Path that use for build
+  displayName: Dockerfile Path
+  required: true
+  value: Dockerfile
 - name: OPENSHIFT_SECRET_NAME
   description: The name of openshift secret
   displayName: Secret Name
@@ -65,7 +70,8 @@ objects:
         name: "${OPENSHIFT_SECRET_NAME}"
       type: Git
     strategy:
-      dockerStrategy: {}
+      dockerStrategy:
+        dockerfilePath: ${DOCKERFILE_PATH}
       type: Docker
     successfulBuildsHistoryLimit: 5
     triggers:
