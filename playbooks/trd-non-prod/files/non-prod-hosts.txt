@@ -1,0 +1,17 @@
+d2d-osmastera01.dmp.true.th
+d2d-osmastera02.dmp.true.th
+d2d-osmastera03.dmp.true.th
+d2d-osinfraa01.dmp.true.th
+d2d-osinfraa02.dmp.true.th
+d2d-osinfrab01.dmp.true.th
+d2d-osinfrab02.dmp.true.th
+d2d-oscomputea01.dmp.true.th
+d2d-oscomputea02.dmp.true.th
+d2d-oscomputea03.dmp.true.th
+d2d-oscomputea04.dmp.true.th
+d2d-oscomputea05.dmp.true.th
+d2d-oscomputea06.dmp.true.th
+d2d-oscomputea07.dmp.true.th
+d2d-oscomputea08.dmp.true.th
+d2d-oscomputea09.dmp.true.th
+d2d-oscomputea10.dmp.true.th

@@ -1,0 +1,65 @@
+---
+- name: Pre-install-tasks
+  hosts: nodes
+  vars:
+    #password generate using python -c 'import crypt; print crypt.crypt("xxxxxxx", "TrueL!fe")'
+    password: Tr3EwHBIFzuoU
+  tasks:
+  - block:
+    - name: Add user for OCP installtion
+      user: name=ansible group=users uid=10010 comment=ansible-user password={{password}}
+
+    - name: Copy authorized keys
+      authorized_key:
+        user: ansible
+        state: present
+        manage_dir: yes
+        key: "{{ lookup('file', '/root/.ssh/id_rsa.pub') }}"
+
+    - name: Add user in sudoers file
+      lineinfile:
+        dest: /etc/sudoers
+        state: present
+        insertafter: '^root'
+        line: 'ansible ALL=(ALL) NOPASSWD: ALL'
+
+- name: Comment and unmount unused mount points
+  hosts: nodes
+  tasks:
+  - block:
+    - name: Comment unused mount points - Master Nodes
+      replace:
+        dest: /etc/fstab
+        regexp: '^/dev/mapper/ocp-origin.ole'
+        replace: '#/dev/mapper/ocp-origin.ole'
+      when: "'masters' in group_names"
+
+    - name: Comment unused mount points - All OCP Nodes
+      replace:
+        dest: /etc/fstab
+        regexp: '^/dev/mapper/ocp-origin.olv'
+        replace: '#/dev/mapper/ocp-origin.olv'
+
+    - name: Unmount unused mount points - Master Nodes
+      mount:
+        path: /var/lib/origin/openshift.local.etcd
+        state: unmounted
+      when: "'masters' in group_names"
+
+    - name: Unmount unused mount points - All OCP Nodes
+      mount:
+        path: /var/lib/origin/openshift.local.volumes
+        state: unmounted
+
+- name: Metrics Configurations(Selinux and dir perms)
+  hosts: d2p-osinfrab04:dmp.true.th
+  tasks:
+  - block:
+    - name: Metrics Configuration - Set SE-Linux permissions
+      command: >
+        chcon -u system_u -r object_r -t svirt_sandbox_file_t -l s0 /var/mnt/metric/
+
+    - name: Metrics Configuration - Set directory permissions
+      file:
+        path: '/var/mnt/metric/'
+        mode: 0777

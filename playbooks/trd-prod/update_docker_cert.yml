@@ -1,0 +1,35 @@
+---
+- name: Docker External Registry
+  hosts: 'nodes:!d2p-osinfra*'
+  tasks:
+  - block:
+    - name: Copy CA Certificate - External Docker Registry
+      copy:
+        src: /etc/ansible/playbooks/prod/files/docker-registry2.crt
+        dest: /etc/pki/ca-trust/source/anchors/
+        backup: yes
+        mode: 0644
+
+   ##Copy the non-prod cert to prod, prod already has its own cert.
+    - name: Copy CA Certificate - Internal Docker Registry
+      copy:
+        src: /etc/ansible/playbooks/prod/files/ocp-internal-registry-np.crt
+        dest: /etc/pki/ca-trust/source/anchors/
+        backup: yes
+        mode: 0644
+
+    - name: Update Certs
+      command: >
+        /usr/bin/update-ca-trust extract
+
+    - name: Copy Docker Config
+      copy:
+        src: /etc/ansible/playbooks/prod/files/docker
+        dest: /etc/sysconfig/
+        backup: yes
+        mode: 0644
+
+    - name: Restart Docker Service
+      service:
+        name: docker
+        state: restarted

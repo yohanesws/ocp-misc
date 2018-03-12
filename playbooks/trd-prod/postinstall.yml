@@ -1,0 +1,83 @@
+---
+- name: Post-install-tasks-Metrics
+  hosts: masters[0]
+  tasks:
+  - block:
+    - name: Login as cluster-admin
+      command: >
+        /usr/local/bin/oc login
+        -u system:admin
+
+    - name: Scale-down Metrics Replication Controllers
+      command: >
+        /usr/local/bin/oc scale rc {{item}}
+        --replicas=0
+        -n openshift-infra
+      with_items:
+      - heapster
+      - hawkular-metrics
+      - hawkular-cassandra-1
+
+    - name: Metrics Configuration - Add privileges to cassandra service account
+      command: >
+        /usr/local/bin/oc adm policy add-scc-to-user privileged 
+        -z cassandra
+        -n openshift-infra
+
+    - name: Metrics Configuration - Assign persistent volume
+      command: >
+        /usr/local/bin/oc volume rc/hawkular-cassandra-1
+        --add
+        --overwrite
+        --name=cassandra-data
+        --type=hostPath
+        --path=/var/mnt/metric
+        -n openshift-infra
+
+    - name: Scale-up Metrics Replication Controllers
+      command: >
+        /usr/local/bin/oc scale rc {{item}}
+        --replicas=1
+        -n openshift-infra
+      with_items:
+      - hawkular-cassandra-1
+      - hawkular-metrics
+      - heapster
+
+- name: Default Project Template for Limits
+  hosts: masters[0]
+  tasks:
+  - block:
+    - name: Copy template file
+      copy:
+        src: /etc/ansible/playbooks/prod/files/project-template.yaml
+        dest: /tmp/
+        mode: 0644
+
+    - name: Create template in default project
+      command: >
+        /usr/local/bin/oc create
+        -f /tmp/project-template.yaml
+        -n default
+
+- name: Modify Config File & Restart Services
+  hosts: masters
+  tasks:
+  - block:
+    - name: Modify the master-config.yaml
+      lineinfile:
+        dest: /etc/origin/master/master-config.yaml
+        regexp: '^(.*)projectRequestTemplate'
+        line: '  projectRequestTemplate: "default/project-request"'
+        backup: yes
+        state: present
+
+    - name: Restart Master API Service
+      systemd:
+        name: atomic-openshift-master-api
+        state: restarted
+
+    - name: Restart Master Controller Service
+      systemd:
+        name: atomic-openshift-master-controllers
+        state: restarted

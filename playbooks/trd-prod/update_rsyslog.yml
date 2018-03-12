@@ -1,0 +1,46 @@
+- name: Atomic Rsyslog Configuration
+  hosts: nodes
+  tasks:
+  - block:
+    - name: Update rsyslog for GrayLog
+      lineinfile:
+        dest: /etc/rsyslog.conf
+        insertafter: EOF
+        line: '*.* @applog2.dmp.true.th:8514;RSYSLOG_SyslogProtocol23Format'
+        backup: yes
+        state: present
+
+    - name: Stop rsyslog container
+      command: >
+        /usr/bin/docker stop rsyslog
+
+    - name: Remove rsyslog container
+      command: >
+         /usr/bin/docker rm rsyslog
+
+    - name: Start rsyslog container
+      command: >
+        /usr/bin/atomic run rhel7/rsyslog
+    tags:
+      - update-rsyslog
+
+##disable the local journald persistent logging - to be run one time only
+#  - block:
+#    - name: Disable the local journald persistent logging
+#      replace:
+#        dest: /etc/systemd/journald.conf
+#        regexp: '^Storage=persistent'
+#        replace: 'Storage=volatile'
+#        backup: yes
+
+#    - name: Reboot Hosts
+#      shell: sleep 2 && reboot
+#      async: 1
+#      poll: 0
+#      ignore_errors: true
+
+#    - name: Waiting for hosts
+#      local_action: wait_for host={{ ansible_ssh_host }} state=started timeout=60
+
+#    tags:
+#      - update-journal

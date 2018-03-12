@@ -1,0 +1,7 @@
+---
+- name: Docker External Registry
+  hosts: 'nodes:!d2d-osinfra*'
+  tasks:
+  - block:
+    - name: Test
+      command: hostname

@@ -1,0 +1,18 @@
+##Created to disable imagefs.inodesFree in node-config.yml because of below issue
+##https://access.redhat.com/support/cases/#/case/02047607
+
+- name: Update Code Config
+  hosts: nodes
+  tasks:
+  - block:
+    - name: Disable imagefs.inodesFree
+      lineinfile:
+        dest: /etc/origin/node/node-config.yaml
+        regexp: '- imagefs.inodesFree'
+        backup: yes
+        state: absent
+
+    - name: Restart-Openshift-Node-Service
+      service:
+        name: atomic-openshift-node.service
+        state: restarted

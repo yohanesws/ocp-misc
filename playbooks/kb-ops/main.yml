@@ -1,0 +1,74 @@
+---
+- hosts: masters[0]
+  tasks:
+  - name: setup deployment prune cron job
+    cron:
+      name: deployments
+      hour: 4
+      minute: 10
+      job: /bin/oadm prune deployments --orphans --confirm
+  - name: setup build prune cron job
+    cron:
+      name: builds
+      hour: 4
+      minute: 30
+      job: /bin/oadm prune builds --orphans --confirm
+  - name: get service accounts
+    command: oc get sa -n default -o name
+    register: serviceaccounts
+    changed_when: false
+  - name: create service account pruner
+    command: oc create sa -n default pruner
+    when: '"serviceaccount/pruner" not in serviceaccounts.stdout_lines'
+    register: create
+  - name: grant image-pruner role to pruner
+    command: oadm policy add-cluster-role-to-user system:image-pruner system:serviceaccount:default:pruner
+    when: create.changed
+  - name: setup image prune cron job
+    cron:
+      name: images
+      hour: 4
+      minute: 50
+      job: '/bin/oadm --token=$(oc sa get-token pruner -n default) prune images --confirm'
+
+- hosts: OSEv3
+  vars:
+    kubeletArguments:
+      minimum-container-ttl-duration:
+      - "10s"
+      maximum-dead-containers-per-container:
+      - "2"
+      maximum-dead-containers:
+      - "80"
+      image-gc-high-threshold:
+      - "60"
+      image-gc-low-threshold:
+      - "40"
+  tasks:
+  - name: add log rotation for /var/log/daemon.log
+    copy:
+      src: daemon
+      dest: /etc/logrotate.d/daemon
+      owner: root
+      group: root
+      mode: 0644
+  - name: fetch node config
+    fetch:
+      src: /etc/origin/node/node-config.yaml
+      dest: /tmp
+  - name: read node config
+    set_fact:
+      config: "{{ lookup('file', '/tmp/{{ inventory_hostname }}/etc/origin/node/node-config.yaml') | from_yaml }}"
+  - name: merge gc options kubeletArguments in node config
+    copy:
+      content: "{{ config | combine({'kubeletArguments': kubeletArguments}, recursive=True) | to_nice_yaml(indent=2) }}"
+      dest: /etc/origin/node/node-config.yaml
+      owner: root
+      group: root
+      mode: 0644
+    register: node
+  - name: restart openshift node
+    systemd:
+      name: atomic-openshift-node
+      state: restarted
+    when: node.changed

@@ -1,0 +1,31 @@
+---
+- hosts: nodes
+  tasks:
+  - name: add artifactory static dns
+    copy:
+      src: artifactory.conf
+      dest: /etc/dnsmasq.d/artifactory.conf
+      owner: root
+      group: root
+      mode: 0644
+    register: node
+  - name: restart dnsmasq
+    systemd:
+      name: dnsmasq
+      state: restarted
+    when: node.changed
+- hosts: masters,workers
+  tasks:
+  - name: add master static dns
+    copy:
+      src: master.conf
+      dest: /etc/dnsmasq.d/master.conf
+      owner: root
+      group: root
+      mode: 0644
+    register: node
+  - name: restart dnsmasq
+    systemd:
+      name: dnsmasq
+      state: restarted
+    when: node.changed

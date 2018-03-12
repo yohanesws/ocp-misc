@@ -1,0 +1,11 @@
+---
+- name: Copy HTPasswd Auth file
+  hosts: masters
+  tasks:
+  - block:
+    - name: Copy File
+      copy:
+        src: /etc/ansible/playbooks/non-prod/files/users.htpasswd
+        dest: /etc/origin/master/users.htpasswd 
+        backup: yes
+        mode: 0644

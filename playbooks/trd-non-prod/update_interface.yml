@@ -1,0 +1,20 @@
+---
+- name: Update Network Interface to add DOMAIN entry
+  hosts: nodes
+  vars:
+    iface: ${ansible_default_ipv4.interface}
+  tasks:
+  - block:
+    - name: Update interface settings if ens160
+      lineinfile:
+        dest: /etc/sysconfig/network-scripts/ifcfg-ens160
+        line: 'DOMAIN=dmp.true.th'
+        insertafter: '^IPADDR'
+        backup: yes
+        state: present
+      when: ansible_default_ipv4.interface == 'ens160'
+      notify: svc_restart
+        
+  handlers:
+    - name: svc_restart
+      service: name=network state=restarted
