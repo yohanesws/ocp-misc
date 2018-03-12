@@ -1,11 +1,7 @@
 try {
-    parameters {
-        string(defaultValue: "test", description: '', name: 'ENV')
-        string(defaultValue: "testApp", description: '', name: 'APP_NAME')
-    }
-
     timeout(time: 20, unit: 'MINUTES') {
-      def appName=params.APP_NAME
+      def appName
+      def env
       def projectDev="poc-dev"
       def projectAlpha="poc-alpha"
       def projectProd="poc-prod"
@@ -16,8 +12,31 @@ try {
       def tokenProd="eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJrdWJlcm5ldGVzL3NlcnZpY2VhY2NvdW50Iiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9uYW1lc3BhY2UiOiJjaWNkIiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9zZWNyZXQubmFtZSI6ImNsb3VkYXV0by10b2tlbi1kcTFydCIsImt1YmVybmV0ZXMuaW8vc2VydmljZWFjY291bnQvc2VydmljZS1hY2NvdW50Lm5hbWUiOiJjbG91ZGF1dG8iLCJrdWJlcm5ldGVzLmlvL3NlcnZpY2VhY2NvdW50L3NlcnZpY2UtYWNjb3VudC51aWQiOiI4ZWUxYTE2ZC0yMGVlLTExZTgtYjE0MC0wMDUwNTZiMWM1MGYiLCJzdWIiOiJzeXN0ZW06c2VydmljZWFjY291bnQ6Y2ljZDpjbG91ZGF1dG8ifQ.gPZ9a8CemVU3OoXU1rnll2KYdB2pCNBNi_dlSNz_bPF0ql6wgPon9dJFLZ3rncbJ6iZc21JQNhTouZeltgn0EvLjrEc4wMZJwS0YkZ3fzl0tPXpKYM3AZx7Xl_F_L38sPgL_hFevXppK95bMkneOW89Dc24vWX7WPxQ_3BfwGef6GY5ldbMl0l0sFL9MEhRezw_GD9iYqEevMgfndsBaTHlhGjMnyquFJ9R0tdcwxJIQxmH_7DwQUa-r_YdOb4Aot5qY0RVGrkpwr5eXPrdJtuCrvaalCanAKK4urH-gHKJwXo218LInIQUFCjJ9gCIFNtnkkWTv4P7YZ94oKOldZA"
       def tag="blue"
       def altTag="green"
-      echo "trying rollback with param ${params.ENV}"
-      switch (params.ENV) {
+
+      stage('Rollback Input') {
+      def userInput = input(
+        id: 'userInput', message: 'Rollback?', parameters: [
+        // [$class: 'TextParameterDefinition', defaultValue: 'prod', description: 'Environment', name: 'ENV'],
+        [$class: 'ChoiceParameterDefinition', choices: 'prod\nalpha\ndev', description: 'Environment', name: 'ENV'],
+        [$class: 'StringParameterDefinition', defaultValue: 'pocjavas2i', description: 'Target', name: 'APP_NAME']
+        // [ 
+        //     $class: 'BooleanParameterDefinition',
+        //     defaultValue: true,
+        //     name: 'Run test suites?',
+        //     description: 'A checkbox option'
+        //   ],
+        //   [ 
+        //     $class: 'PasswordParameterDefinition',
+        //     defaultValue: "MyPasswd",
+        //     name: 'Enter a password',
+        //     description: 'A password option'
+        //   ],
+      ])
+      env = userInput.ENV
+      appName = userInput.APP_NAME
+    }
+
+      switch (env) {
         case "prod":
           node('prod'){
             stage('Initialize') {

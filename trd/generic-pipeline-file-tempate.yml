@@ -47,6 +47,12 @@ objects:
       name: ${APP_NAME}
     name: ${APP_NAME}
   spec:
+    source:
+      git:
+        uri: "${GIT_SOURCE_URL}"
+        ref: "${GIT_SOURCE_REF}"
+      sourceSecret:
+        name: "${OPENSHIFT_SECRET_NAME}"
     strategy:
       jenkinsPipelineStrategy:
         jenkinsfilePath: ${JENKINSFILE_PATH}
