@@ -1,3 +1,11 @@
+// import com.cloudbees.groovy.cps.NonCPS
+// import com.cloudbees.plugins.credentials.impl.*
+// import com.cloudbees.plugins.credentials.*
+// import com.cloudbees.plugins.credentials.domains.*
+// import jenkins.model.*
+// import hudson.security.*
+// import hudson.model.*
+
 try {
     timeout(time: 20, unit: 'MINUTES') {
       def appName="pocjavabin"
@@ -5,7 +13,7 @@ try {
       def projectAlpha="poc-alpha"
       def projectProd="poc-prod"
       def projectCicd="cicd"
-      def gitRepo="http://git.dmp.true.th/DMP-DevOps/POC-Sample-NodeJS.git"
+      def gitRepo="http://git.dmp.true.th/DMP-DevOps/OC-Sample-JavaSpring2.git"
       def nonProdRepo="docker-registry-default.os2-np.dmp.true.th"
       def prodRepo="docker-registry-default.os2.dmp.true.th"
       def apiNonProd="ose2-np.dmp.true.th:8443"
@@ -14,22 +22,41 @@ try {
       def tokenProd="eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJrdWJlcm5ldGVzL3NlcnZpY2VhY2NvdW50Iiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9uYW1lc3BhY2UiOiJjaWNkIiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9zZWNyZXQubmFtZSI6ImNsb3VkYXV0by10b2tlbi1kcTFydCIsImt1YmVybmV0ZXMuaW8vc2VydmljZWFjY291bnQvc2VydmljZS1hY2NvdW50Lm5hbWUiOiJjbG91ZGF1dG8iLCJrdWJlcm5ldGVzLmlvL3NlcnZpY2VhY2NvdW50L3NlcnZpY2UtYWNjb3VudC51aWQiOiI4ZWUxYTE2ZC0yMGVlLTExZTgtYjE0MC0wMDUwNTZiMWM1MGYiLCJzdWIiOiJzeXN0ZW06c2VydmljZWFjY291bnQ6Y2ljZDpjbG91ZGF1dG8ifQ.gPZ9a8CemVU3OoXU1rnll2KYdB2pCNBNi_dlSNz_bPF0ql6wgPon9dJFLZ3rncbJ6iZc21JQNhTouZeltgn0EvLjrEc4wMZJwS0YkZ3fzl0tPXpKYM3AZx7Xl_F_L38sPgL_hFevXppK95bMkneOW89Dc24vWX7WPxQ_3BfwGef6GY5ldbMl0l0sFL9MEhRezw_GD9iYqEevMgfndsBaTHlhGjMnyquFJ9R0tdcwxJIQxmH_7DwQUa-r_YdOb4Aot5qY0RVGrkpwr5eXPrdJtuCrvaalCanAKK4urH-gHKJwXo218LInIQUFCjJ9gCIFNtnkkWTv4P7YZ94oKOldZA"
       def tag="blue"
       def altTag="green"
+      def secretName="true-gitlab"
+
+      properties([
+        pipelineTriggers([
+            pollSCM('H/10 * * * *')
+        ])
+      ])
 
       node ('maven') {
-        // stage("Build the Source") {
-        //   git branch: 'master', url: 'http://git.dmp.true.th/DMP-DevOps/POC-Sample-JavaSpring.git', credentialsId: 'true-git-jenkinscred'
-        //   sh "mvn clean install -DskipTests=true"
-        //   sh "rm -rf oc-build && mkdir -p oc-build/deployments"
-        //   sh "cp target/*.jar oc-build/deployments/APP.jar"
+        // stage("Synch Secret"){
+        //   openshift.withCluster() {
+        //     def secret = openshift.selector( "secret/${secretName}" ).object()
+        //     echo "get the secret"
+        //     // id = jenkinsUtils.createCredentialsFromOpenShift(secret, "github")
+        //     String username = new String(secret.data.username.decodeBase64())
+        //     String password = new String(secret.data.password.decodeBase64())
+        //     echo "get username "+username
+        //     Credentials c = (Credentials) new UsernamePasswordCredentialsImpl(CredentialsScope.GLOBAL, projectCicd+"-"+secretName, "secret from openshift", username, password)
+        //     SystemCredentialsProvider.getInstance().getStore().addCredentials(Domain.global(), c)
+        //   }
         // }
-        // stage("Build Image") {
-        //   sh "oc login ose2-np.dmp.true.th:8443 --insecure-skip-tls-verify --token=${tokenNonProd}"
-        //   sh "oc project ${projectDev}"
-        //   //create JAVA S2I Binary Build
-        //   sh "oc new-build openshift/redhat-openjdk18-openshift --name=${appName} --binary  -n ${projectDev} || true"
-        //   // start build
-        //   sh "oc start-build ${appName} -n ${projectDev} --from-file=oc-build/deployments/APP.jar --follow --wait"
-        // }
+        stage("Build the Source") {
+          git branch: "master", url: gitRepo , credentialsId: "${projectCicd}-${secretName}", poll: true, changelog: true
+          sh "mvn clean install -DskipTests=true"
+          sh "rm -rf oc-build && mkdir -p oc-build/deployments"
+          sh "cp target/*.jar oc-build/deployments/APP.jar"
+        }
+        stage("Build Image") {
+          sh "oc login ose2-np.dmp.true.th:8443 --insecure-skip-tls-verify --token=${tokenNonProd}"
+          sh "oc project ${projectDev}"
+          //create JAVA S2I Binary Build
+          sh "oc new-build openshift/redhat-openjdk18-openshift --name=${appName} --binary  -n ${projectDev} || true"
+          // start build
+          sh "oc start-build ${appName} -n ${projectDev} --from-file=oc-build/deployments/APP.jar --follow --wait"
+        }
         stage("Deploy Dev") {
             // clean up. keep the image stream
           sh "oc delete dc,svc,route -l app=${appName} -n ${projectDev}"
@@ -44,10 +71,13 @@ try {
               input message: "Promote to ALPHA?", ok: "Promote"
             }
             
-            // tag for stage
-            sh "oc tag ${projectDev}/${appName}:latest ${projectAlpha}/${appName}:alpha"
             // clean up. keep the imagestream
             sh "oc delete bc,dc,svc,route -l app=${appName} -n ${projectAlpha}"
+            // make backup for rollback
+            sh "oc tag ${projectAlpha}/${appName}:alpha ${projectAlpha}/${appName}:old"
+            // tag for stage
+            sh "oc tag ${projectDev}/${appName}:latest ${projectAlpha}/${appName}:${alphaVersion}"
+            // deploy stage image
             // deploy stage image
             sh "oc new-app ${appName}:alpha --name=${appName} -n ${projectAlpha}"
           //  openshiftVerifyDeployment depCfg: "${appName}", namespace: "${projectAlpha}", waitTime: '5', waitUnit: 'min', apiURL:"${apiNonProd}", authToken:"${tokenNonProd}"
@@ -101,6 +131,8 @@ try {
               sh "oc tag ${projectProd}/${appName}:ready ${projectProd}/${appName}:${altTag}"
               sh "oc new-app ${appName}:${altTag} --name=${appName}-${altTag} -n ${projectProd}"
               sh "oc expose svc/${appName}-${altTag} -n ${projectProd}"
+              sh "oc delete route ${appName} -n ${projectProd}"
+              sh "oc expose svc/${appName}-${tag} --name=${appName} -n ${projectProd}"
               sh "oc patch route ${appName} -p '{\"spec\":{\"alternateBackends\":[{\"name\":\"${appName}-${altTag}\",\"weight\":0}]}}'"
             }
         }

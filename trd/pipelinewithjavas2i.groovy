@@ -5,7 +5,7 @@ try {
       def projectAlpha="poc-alpha"
       def projectProd="poc-prod"
       def projectCicd="cicd"
-      def gitRepo="http://git.dmp.true.th/DMP-DevOps/POC-Sample-NodeJS.git"
+      def gitRepo="http://git.dmp.true.th/DMP-DevOps/OC-Sample-JavaSpring2.git"
       def nonProdRepo="docker-registry-default.os2-np.dmp.true.th"
       def prodRepo="docker-registry-default.os2.dmp.true.th"
       def apiNonProd="ose2-np.dmp.true.th:8443"
@@ -14,26 +14,27 @@ try {
       def tokenProd="eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJrdWJlcm5ldGVzL3NlcnZpY2VhY2NvdW50Iiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9uYW1lc3BhY2UiOiJjaWNkIiwia3ViZXJuZXRlcy5pby9zZXJ2aWNlYWNjb3VudC9zZWNyZXQubmFtZSI6ImNsb3VkYXV0by10b2tlbi1kcTFydCIsImt1YmVybmV0ZXMuaW8vc2VydmljZWFjY291bnQvc2VydmljZS1hY2NvdW50Lm5hbWUiOiJjbG91ZGF1dG8iLCJrdWJlcm5ldGVzLmlvL3NlcnZpY2VhY2NvdW50L3NlcnZpY2UtYWNjb3VudC51aWQiOiI4ZWUxYTE2ZC0yMGVlLTExZTgtYjE0MC0wMDUwNTZiMWM1MGYiLCJzdWIiOiJzeXN0ZW06c2VydmljZWFjY291bnQ6Y2ljZDpjbG91ZGF1dG8ifQ.gPZ9a8CemVU3OoXU1rnll2KYdB2pCNBNi_dlSNz_bPF0ql6wgPon9dJFLZ3rncbJ6iZc21JQNhTouZeltgn0EvLjrEc4wMZJwS0YkZ3fzl0tPXpKYM3AZx7Xl_F_L38sPgL_hFevXppK95bMkneOW89Dc24vWX7WPxQ_3BfwGef6GY5ldbMl0l0sFL9MEhRezw_GD9iYqEevMgfndsBaTHlhGjMnyquFJ9R0tdcwxJIQxmH_7DwQUa-r_YdOb4Aot5qY0RVGrkpwr5eXPrdJtuCrvaalCanAKK4urH-gHKJwXo218LInIQUFCjJ9gCIFNtnkkWTv4P7YZ94oKOldZA"
       def tag="blue"
       def altTag="green"
+      def alphaVersion="alpha"
       
-      node {
-        // stage("Build Image") {
-        //   sh "oc login ose2-np.dmp.true.th:8443 --insecure-skip-tls-verify --token=${tokenNonProd}"
-        //   sh "oc project ${projectDev}"
-        //   //create JAVA S2I build
-        //   sh "oc new-build openshift/redhat-openjdk18-openshift~http://git.dmp.true.th/DMP-DevOps/POC-Sample-JavaSpring.git#master --name=${appName}  -n ${projectDev} || true"
-        //   // patch the build to use credential in secret
-        //   sh "oc patch bc ${appName} -p '{\"spec\":{\"source\":{\"sourceSecret\":{\"name\":\"true-gitlab\"}}}}' -n ${projectDev}"
-        //   // patch the build to enable incremental build
-        //   sh "oc patch bc ${appName} -p '{\"spec\":{\"strategy\":{\"sourceStrategy\":{\"incremental\":true}}}}' -n ${projectDev}"
-        //   // Setting Resource Request
-        //   sh "oc patch bc ${appName} -p '{\"spec\":{\"resources\":{\"requests\":{\"cpu\":\"300m\",\"memory\":\"512Mi\"}}}}' -n ${projectDev}"
-        //   // Setting Resource Limit
-        //   sh "oc patch bc ${appName} -p '{\"spec\":{\"resources\":{\"limits\":{\"cpu\":\"500m\",\"memory\":\"1024Mi\"}}}}' -n ${projectDev}"
-        //   sh "oc tag ${projectDev}/${appName}:latest ${projectDev}/${appName}:old"
-        //   // start build
-        //   sh "oc start-build ${appName} -n ${projectDev} --follow --wait"
-        //   // openshiftVerifyBuild bldCfg: "${appName}", namespace: "${projectDev}", waitTime: '20', waitUnit: 'min', apiURL: "${apiNonProd}", authToken: "${tokenNonProd}"
-        // }
+      node('maven') {
+        stage("Build Image") {
+          sh "oc login ose2-np.dmp.true.th:8443 --insecure-skip-tls-verify --token=${tokenNonProd}"
+          sh "oc project ${projectDev}"
+          //create JAVA S2I build
+          sh "oc new-build openshift/redhat-openjdk18-openshift~${gitRepo}#master --name=${appName}  -n ${projectDev} || true"
+          // patch the build to use credential in secret
+          sh "oc patch bc ${appName} -p '{\"spec\":{\"source\":{\"sourceSecret\":{\"name\":\"true-gitlab\"}}}}' -n ${projectDev}"
+          // patch the build to enable incremental build
+          sh "oc patch bc ${appName} -p '{\"spec\":{\"strategy\":{\"sourceStrategy\":{\"incremental\":true}}}}' -n ${projectDev}"
+          // Setting Resource Request
+          sh "oc patch bc ${appName} -p '{\"spec\":{\"resources\":{\"requests\":{\"cpu\":\"300m\",\"memory\":\"512Mi\"}}}}' -n ${projectDev}"
+          // Setting Resource Limit
+          sh "oc patch bc ${appName} -p '{\"spec\":{\"resources\":{\"limits\":{\"cpu\":\"500m\",\"memory\":\"1024Mi\"}}}}' -n ${projectDev}"
+          sh "oc tag ${projectDev}/${appName}:latest ${projectDev}/${appName}:old"
+          // start build
+          sh "oc start-build ${appName} -n ${projectDev} --follow --wait"
+          // openshiftVerifyBuild bldCfg: "${appName}", namespace: "${projectDev}", waitTime: '20', waitUnit: 'min', apiURL: "${apiNonProd}", authToken: "${tokenNonProd}"
+        }
         stage("Deploy Dev") {
             // clean up. keep the image stream
           sh "oc delete dc,svc,route -l app=${appName} -n ${projectDev}"
@@ -46,15 +47,19 @@ try {
             timeout(time:10, unit:'MINUTES') {
               // input message: "Promote to ALPHA?", ok: "Promote", submitter: '"CN=Tumanoon Punjansing,OU=Employees,DC=true,DC=care"'
               input message: "Promote to ALPHA?", ok: "Promote"
+            //  def inputAlphaPromote = input(message: "Promote to ALPHA?", ok: "Promote",parameters: [
+            //     [$class: 'StringParameterDefinition', defaultValue: 'alpha', description: 'Target', name: 'ALPHA_VERSION']
+            //   ])
+            //   alphaVersion = inputAlphaPromote.ALPHA_VERSION
             }
+            // clean up. keep the imagestream
+            sh "oc delete bc,dc,svc,route -l app=${appName} -n ${projectAlpha}"
             // make backup for rollback
             sh "oc tag ${projectAlpha}/${appName}:alpha ${projectAlpha}/${appName}:old"
             // tag for stage
-            sh "oc tag ${projectDev}/${appName}:latest ${projectAlpha}/${appName}:alpha"
-            // clean up. keep the imagestream
-            sh "oc delete bc,dc,svc,route -l app=${appName} -n ${projectAlpha}"
+            sh "oc tag ${projectDev}/${appName}:latest ${projectAlpha}/${appName}:${alphaVersion}"
             // deploy stage image
-            sh "oc new-app ${appName}:alpha --name=${appName} -n ${projectAlpha}"
+            sh "oc new-app ${appName}:${alphaVersion} --name=${appName} -n ${projectAlpha}"
           //  openshiftVerifyDeployment depCfg: "${appName}", namespace: "${projectAlpha}", waitTime: '5', waitUnit: 'min', apiURL:"${apiNonProd}", authToken:"${tokenNonProd}"
             sh "oc rollout status dc/${appName} -w -n ${projectAlpha}"
             sh "oc expose svc/${appName} -n ${projectAlpha}"
@@ -106,6 +111,8 @@ try {
               sh "oc tag ${projectProd}/${appName}:ready ${projectProd}/${appName}:${altTag}"
               sh "oc new-app ${appName}:${altTag} --name=${appName}-${altTag} -n ${projectProd}"
               sh "oc expose svc/${appName}-${altTag} -n ${projectProd}"
+              sh "oc delete route ${appName} -n ${projectProd}"
+              sh "oc expose svc/${appName}-${tag} --name=${appName} -n ${projectProd}"
               sh "oc patch route ${appName} -p '{\"spec\":{\"alternateBackends\":[{\"name\":\"${appName}-${altTag}\",\"weight\":0}]}}'"
             }
         }
