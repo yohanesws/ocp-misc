@@ -1,0 +1,6 @@
+#!/bin/bash
+
+echo "run layer"
+
+# Call default run script
+/usr/local/s2i/run

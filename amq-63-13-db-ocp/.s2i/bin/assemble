@@ -1,0 +1,26 @@
+#!/bin/bash
+
+echo "assemble layer"
+
+if [ "${SCRIPT_DEBUG}" = "true" ] ; then
+    set -x
+    echo "Script debugging is enabled, allowing bash commands and their arguments to be printed as they are executed"
+fi
+
+BIN=/tmp/src/bin
+
+if [ -d ${BIN} ]; then
+  echo "Copying binary files from project..."
+  cp -v ${BIN}/* $AMQ_HOME/bin
+fi
+
+
+LIBS=/tmp/src/libraries
+
+if [ -d ${LIBS} ]; then
+  echo "Copying libraries files from project..."
+  cp -v ${LIBS}/*.jar $AMQ_HOME/lib
+fi
+
+# Call default assemble script
+/usr/local/s2i/assemble
