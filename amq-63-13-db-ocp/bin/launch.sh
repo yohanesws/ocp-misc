@@ -40,6 +40,17 @@ fi
 if [ -n "$JDBC_PASSWORD" ]; then
   JDBC_OPTS="${JDBC_OPTS} -Dactivemq.jdbc.password=${JDBC_PASSWORD}"
 fi
+if [ -n "$JDBC_MAX_POOL" ]; then
+  JDBC_OPTS="${JDBC_OPTS} -Dactivemq.jdbc.max.pool=${JDBC_MAX_POOL}"
+fi
+if [ -n "$JDBC_MIN_POOL" ]; then
+  JDBC_OPTS="${JDBC_OPTS} -Dactivemq.jdbc.min.pool=${JDBC_MIN_POOL}"
+fi
+if [ -n "$JDBC_MAX_WAIT" ]; then
+  JDBC_OPTS="${JDBC_OPTS} -Dactivemq.jdbc.max.wait=${JDBC_MAX_WAIT}"
+else
+  JDBC_OPTS="${JDBC_OPTS} -Dactivemq.jdbc.max.wait=5000"
+fi
 
 echo $JDBC_OPTS
 

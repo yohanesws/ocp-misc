@@ -32,11 +32,15 @@
           init-method="start" destroy-method="stop">
     </bean>
 
-     <bean id="mariadb-ds" class="org.apache.commons.dbcp2.BasicDataSource" destroy-method="close">
+     <bean id="jdbc-ds" class="org.apache.commons.dbcp2.BasicDataSource" destroy-method="close">
         <property name="driverClassName" value="${activemq.jdbc.driver}"/>
         <property name="url" value="${activemq.jdbc.url}"/>
         <property name="username" value="${activemq.jdbc.username}"/>
         <property name="password" value="${activemq.jdbc.password}"/>
+        <property name="initialSize" value="${activemq.jdbc.min.pool}"/>
+        <property name="maxTotal" value="${activemq.jdbc.max.pool}"/>
+        <property name="maxIdle" value="${activemq.jdbc.min.pool}"/>
+        <property name="maxWaitMillis" value="${activemq.jdbc.max.wait}"/>
         <property name="poolPreparedStatements" value="true"/>
     </bean>
 
@@ -123,7 +127,7 @@
         </persistenceAdapter> -->
 
         <persistenceAdapter>
-            <jdbcPersistenceAdapter dataSource="#mariadb-ds"/>
+            <jdbcPersistenceAdapter dataSource="#jdbc-ds"/>
         </persistenceAdapter>
 
         <plugins>
