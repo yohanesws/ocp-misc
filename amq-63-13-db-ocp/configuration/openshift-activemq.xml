@@ -127,7 +127,11 @@
         </persistenceAdapter> -->
 
         <persistenceAdapter>
-            <jdbcPersistenceAdapter dataSource="#jdbc-ds"/>
+            <jdbcPersistenceAdapter dataSource="#jdbc-ds" lockKeepAlivePeriod="5000">
+                <locker>
+                    <lease-database-locker lockAcquireSleepInterval="10000"/>
+                </locker>
+            </jdbcPersistenceAdapter>
         </persistenceAdapter>
 
         <plugins>
