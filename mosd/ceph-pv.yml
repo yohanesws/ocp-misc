@@ -1,0 +1,31 @@
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  annotations:
+    pv.kubernetes.io/bound-by-controller: "yes"
+  creationTimestamp: null
+  name: ceph-pv
+spec:
+  accessModes:
+  - ReadWriteOnce
+  capacity:
+    storage: 2Gi
+  claimRef:
+    apiVersion: v1
+    kind: PersistentVolumeClaim
+    name: ceph-claim
+    namespace: uat-test
+    resourceVersion: "1411187"
+    uid: 3f01a189-0705-11e8-beb5-001a4a160161
+  persistentVolumeReclaimPolicy: Recycle
+  rbd:
+    fsType: ext4
+    image: ceph-image
+    keyring: /etc/ceph/keyring
+    monitors:
+    - ceph-mon01.osdec.gov.my:6789,ceph-mon02.osdec.gov.my:6789,ceph-mon03.osdec.gov.my:6789
+    pool: rbd
+    secretRef:
+      name: ceph-secret
+    user: admin
+status: {}
