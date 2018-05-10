@@ -1,0 +1,44 @@
+---
+- hosts: masters[0],workers
+  tasks:
+  - name: copy tar to tmp
+    copy:
+     src: "{{ item }}"
+     dest: /root/images/
+    with_fileglob:
+    - /root/images/*.tar
+    register: images
+  - name: docker load
+    command: "docker load -i {{ item }}"
+    with_fileglob:
+    - /root/images/*.tar
+    when: images.changed
+- hosts: workers
+  tasks:
+  - name: add masters static dns
+    copy:
+     src: "{{ item }}"
+     dest: "/etc/dnsmasq.d/"
+     owner: root
+     group: root
+     mode: 0644
+    with_fileglob:
+    - /root/conf/*.conf
+    register: node
+  - name: restart dnsmasq
+    systemd:
+     name: dnsmasq
+     state: restarted
+    when: node.changed
+  - name: create registry cert folder
+    file:
+     path: /etc/docker/certs.d/docker-registry-default.ocpdev.supporting.devmandiri.co.id
+     state: directory
+  - name: copy registry cert
+    copy:
+     src: "registry-nonprod.crt"
+     dest: "/etc/docker/certs.d/docker-registry-default.ocpdev.supporting.devmandiri.co.id"
+     owner: root
+     group: root
+     mode: 0644
+
