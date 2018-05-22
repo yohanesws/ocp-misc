@@ -41,8 +41,11 @@ try {
                 sh "oc project ${cicd}"
                 for (image in apps){
                     sh "oc delete bc image-mover-${image} || true"
+                    sh "oc tag ${cicd}/${projectStaging}-${image}:latest -d || true"
                     sh "oc delete is ${projectStaging}-${image} || true"
                     sh "oc new-build --strategy=docker --dockerfile=\"FROM ${nonProdRegistry}/${projectStaging}/${image}:latest\" --to=\"docker-registry.default.svc:5000/${cicd}/${projectStaging}-${image}:latest\" --name=image-mover-${image} --allow-missing-images"
+                    sh "oc cancel-build bc/image-mover-${image}"
+                    sh "oc patch bc/image-mover-${image} -p '{ \"spec\" : { \"strategy\" : { \"dockerStrategy\" : { \"forcePull\" : true}}}}'"
                     sh "oc set build-secret --pull bc/image-mover-${image} non-prod-registry"
                     sh "oc start-build bc/image-mover-${image} --wait"
                 }

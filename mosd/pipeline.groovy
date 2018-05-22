@@ -28,7 +28,14 @@ try {
         stage("Deploy Dev") {
             sh "oc project ${projectDev}"
             sh "oc new-app php-70-redis~${gitRepo} --name=${appName} --source-secret=${sourceSecret} || true"
+            sh "oc rollout cancel dc/${appName} -n ${projectDev} || true"
+            sh "oc rollout pause dc/${appName} -n ${projectDev}"
             sh "oc set volume dc/${appName} -n ${projectDev} --add --name=pictures -t pvc --claim-name=myprestasi-pict-sitdev --mount-path=/opt/app-root/src/uploads || true"
+            sh "oc set volume dc/${appName} -n ${projectDev} --add --name=htaccess -t configmap --configmap-name=myprestasi-cm --mount-path=/opt/app-root/src/.htaccess --sub-path=.htaccess || true"
+            sh "oc set volume dc/${appName} -n ${projectDev} --add --name=database-config -t configmap --configmap-name=myprestasi-cm --mount-path=/opt/app-root/src/application/config/database.php --sub-path=database.php || true"
+            sh "oc set volume dc/${appName} -n ${projectDev} --add --name=config -t configmap --configmap-name=myprestasi-cm --mount-path=/opt/app-root/src/application/config/config.php --sub-path=config.php || true"      
+            sh "oc set volume dc/${appName} -n ${projectDev} --add --name=redis -t configmap --configmap-name=myprestasi-cm --mount-path=/etc/opt/rh/rh-php70/php.d/20-redis.ini --sub-path=20-redis.ini || true"
+            sh "oc rollout resume dc/${appName} -n ${projectDev}"
             sh "oc start-build ${appName} --wait"
         }
         stage("Promote SIT") {
