@@ -4,8 +4,6 @@ try {
       def projectTarget="poc-dev"
       def projectCicd="cicd"
       def gitRepo="http://git.dmp.true.th/DMP-DevOps/OC-Sample-JavaSpring2.git"
-      def tag="blue"
-      def altTag="green"
       def secretName="true-gitlab"
       def branch="master"
       def version=""
@@ -58,7 +56,15 @@ try {
 
           if (secretDb !=  ""){
             //copying secret db
-            sh "oc export secret/${secretDb}-${version} -n ${projectCicd} | oc apply -n ${projectTarget} -f -"
+            sh "oc get secret ${secretDb} -o template --template='{{.data.password}'|base64 > password.secret"
+            sh "oc get secret ${secretDb} -o template --template='{{.data.username}'|base64 > username.secret"
+            sh "oc get secret ${secretDb} -o template --template='{{.data.url}'|base64 > url.secret"
+            def password=readFile(password.secret)
+            def username=readFile(username.secret)
+            def url=readFile(url.secret)
+            sh "rm -f *.secret"
+            sh "oc create secret generic ${appName}-${version}-db --from-literal=username=${username} --from-literal=password=${password} --from-literal=url=${url} -n ${projectTarget}"
+            sh "oc label secret/${appName}-${version}-db app=${appName}-${version} -n ${projectTarget}"
           }
         }
         stage("Deploy Dev") {
@@ -69,10 +75,10 @@ try {
           sh "oc rollout pause ${appName}-${version} -n ${projectTarget}"  
           sh "oc set volume dc/${appName}-${version} -n ${projectTarget} --add --name=config-volume -t configmap --configmap-name=${appName}-${version}-cm --mount-path=/deployments/config || true"
           if (secretDb !=  ""){
-              sh "oc set env --from=configmap/myconfigmap --prefix=SPRING_DATASOURCE_"
+              sh "oc set env --from=secret/${appName}-${version}-db --prefix=SPRING_DATASOURCE_ dc/${appName}-${version} -n ${projectTarget}"
           }
           //apply timezone
-          sh "oc set env dc/${appName}-${version} TZ=Asia/Tokyo -n ${projectTarget}"
+          sh "oc set env dc/${appName}-${version} TZ=Asia/Bangkok -n ${projectTarget}"
           //apply default server port
           sh "oc set env dc/${appName}-${version} SERVER_PORT=8080 -n ${projectTarget}"
           //configure central
