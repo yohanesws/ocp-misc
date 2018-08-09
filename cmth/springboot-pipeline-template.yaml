@@ -106,7 +106,7 @@ objects:
                 def branch="${SOURCE_REPOSITORY_BRANCH}"
                 def secretName="${SOURCE_REPOSITORY_CREDENTIAL_SECRET}"
                 def version=""
-                def needroute="${NEED_ROUTER}""
+                def needroute="${NEED_ROUTER}"
                 def secretDb=""
                 def springconfig="${SPRING_CONFIG_URI}"
 
