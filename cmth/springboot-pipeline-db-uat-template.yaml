@@ -184,7 +184,7 @@ objects:
 
             properties([
               pipelineTriggers([
-                  pollSCM('H/10 * * * *')
+                  pollSCM('H/5 * * * *')
               ])
             ])
 
