@@ -4,13 +4,12 @@ try {
       def projectTarget="application-sit"
       def projectCicd="cicd"
       def gitRepo="https://git.raindrop.cimbthai.com/platform/centralize-configuration.git"
-      def branch="master"
+      def branch="develop"
       def secretName="gitlab-cimb"
       def version=""
       def needroute=false
       def secretDb="central-config-secret"
       def springconfig=""
-      def bluegreen=false
 
 
       properties([
@@ -19,10 +18,15 @@ try {
         ])
       ])
 
+      node(){
+          stage('Preparing'){
+            git branch: branch, url: gitRepo , credentialsId: "${projectCicd}-${secretName}", poll: true, changelog: true
+          }
+      }
+
       node ('maven') {
         stage("Cloning"){
-          sh "git config --global http.sslVerify false"
-          git branch: branch, url: gitRepo , credentialsId: "${projectCicd}-${secretName}", poll: true, changelog: true
+          git branch: branch, url: gitRepo , credentialsId: "${projectCicd}-${secretName}"
           sh "git for-each-ref --sort=taggerdate --count=1 --format '%(refname:short)' refs/tags | tr -d '\n'| tr '.' '-'> latesttag.txt"
           //sh "cat latesttag.txt|  tr -d '\n' > tag.txt"
           version=readFile('latesttag.txt')
@@ -44,6 +48,7 @@ try {
           sh "oc tag ${projectTarget}/${appName}:latest ${projectTarget}/${appName}:${version}"
         }
         stage ("Configuring") {
+          sh "oc delete cm,secret -l app=${appName}-${version} -n ${projectTarget} || true"
           sh "rm -rf files-config && mkdir -p files-config"
           sh "chmod -R 777 src/main/resources"
           sh "cp src/main/resources/*.properties files-config/ || true"
@@ -61,21 +66,23 @@ try {
             sh "oc get secret ${secretDb} -n ${projectCicd} -o template --template='{{.data.password}}'|base64 -d|tr -d '\n' > password.secret"
             sh "oc get secret ${secretDb} -n ${projectCicd} -o template --template='{{.data.username}}'|base64 -d|tr -d '\n' > username.secret"
             sh "oc get secret ${secretDb} -n ${projectCicd} -o template --template='{{.data.url}}'|base64 -d|tr -d '\n' > url.secret"
-            sh "ls"
-            sh "cat password.secret"
             def password=readFile('password.secret')
             def username=readFile('username.secret')
             def url=readFile('url.secret')
             sh "rm -f *.secret"
-            sh "oc create secret generic ${appName}-${version}-db --from-literal=username=${username} --from-literal=password=${password} --from-literal=url=${url} -n ${projectTarget} ||true"
-            sh "oc label secret/${appName}-${version}-db app=${appName}-${version} -n ${projectTarget} || true"
+            sh "oc create secret generic ${appName}-${version}-db --from-literal=username=${username} --from-literal=password=${password} --from-literal=url=${url} -n ${projectTarget}"
+            sh "oc label secret/${appName}-${version}-db app=${appName}-${version} -n ${projectTarget}"
           }
         }
-        if(bluegreen){
+        stage("Deploying") {
 
-        }else{
-          stage("Deploy Uat") {
-            sh "oc new-app --docker-image=docker-registry.default.svc:5000/${projectTarget}/${appName}:${version} --name=${appName}-${version} -n ${projectTarget} || true"
+          sh "oc get dc ${appName}-${version} -o jsonpath='{.metadata.name}' -n ${projectTarget} > dc"
+          dc = readFile('dc').trim()
+          echo 'dc ${dc}'
+
+          if (dc.contains('Error')){
+            sh "oc tag ${projectTarget}/${appName}:${version} ${projectTarget}/${appName}:uat-${version}"
+            sh "oc new-app --docker-image=docker-registry.default.svc:5000/${projectTarget}/${appName}:uat-${version} --name=${appName}-${version} -n ${projectTarget} || true"
             sh "oc rollout cancel dc/${appName}-${version} -n ${projectTarget} || true"
             sh "oc rollout pause dc/${appName}-${version} -n ${projectTarget}"  
             sh "oc set volume dc/${appName}-${version} -n ${projectTarget} --add --name=config-volume -t configmap --configmap-name=${appName}-${version}-cm --mount-path=/deployments/config || true"
@@ -93,10 +100,16 @@ try {
             sh "oc rollout resume dc/${appName}-${version} -n ${projectTarget}"  
             sh "oc rollout status dc/${appName}-${version} -w -n ${projectTarget}"
             if (needroute)
-              sh "oc expose svc/${appName}-${version} -n ${projectTarget}"
+              sh "oc create route edge ${appName}-${version}-public --service=${appName}-${version} -n ${projectTarget}"
+              sh "oc create route edge ${appName}-${version}-internal --service=${appName}-${version} -n ${projectTarget}"
+              sh "oc label route ${appName}-${version}-internal exposure=internal"
+              sh "oc create route edge ${appName}-${version}-partner --service=${appName}-${version} -n ${projectTarget}"
+              sh "oc label route ${appName}-${version}-partner exposure=partner"
+          }else{
+            sh "oc tag ${projectTarget}/${appName}:${version} ${projectTarget}/${appName}:uat-${version}"
+            echo "just update the image"
           }
         }
-        
       }
   }
 } catch (err) {

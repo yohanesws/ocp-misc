@@ -1,14 +1,14 @@
 apiVersion: v1
 kind: Template
 labels:
-  template: springboot-nodb-pipeline-template
+  template: springboot-nodb-sit-pipeline-template
 message: |-
   A Jenkins server will be automatically instantiated in this project to manage
   the Pipeline BuildConfig created by this template.  You will be able to log in to
   it using your OpenShift user credentials.
 metadata:
   annotations:
-    openshift.io/display-name: Pipeline Build Example
+    openshift.io/display-name: Spring Boot SIT Pipeline no Database
     description: |-
       This template showcases the new Jenkins Pipeline integration for spring boot in OpenShift,
       which performs continuous integration and deployment right on the platform.
@@ -18,7 +18,7 @@ metadata:
       console allowing you to see your entire application lifecycle in a single view.
     iconClass: icon-jenkins
     tags: instant-app,springboot,nodb,jenkins
-  name: springboot-nodb-pipeline-template
+  name: springboot-nodb-sit-pipeline-template
 parameters:
 - description: The name assigned to pipeline defined in this template.
   displayName: Pipeline Name
