@@ -209,7 +209,7 @@ objects:
                   step([$class: 'JUnitResultArchiver', testResults: '**/target/surefire-reports/TEST-*.xml'])
                 }
                 stage("Code Analysis") {
-                  sh "mvn sonar:sonar -Dsonar.host.url=${sonarqube} -Dsonar.login=${sonarqubeToken} -Dsonar.projectName=${appName} -DskipTests=true"
+                  sh "mvn sonar:sonar -Dsonar.host.url=${sonarqube} -Dsonar.login=${sonarqubeToken} -Dsonar.projectName=${PIPELINE_NAME} -DskipTests=true"
                 } 
                 stage("Build the Source") {
                   sh "mvn clean install -DskipTests=true"
