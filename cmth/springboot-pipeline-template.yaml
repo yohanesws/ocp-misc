@@ -68,6 +68,12 @@ parameters:
   displayName: SonarQube URL
   name: SONARQUBE_URL
   required: true
+  value: "http://sonarqube-dev-sonar.app-internal.cimbthai.com"
+- description: SonarQube Token for coverage Test.
+  displayName: SonarQube Token
+  name: SONARQUBE_TOKEN
+  required: true
+  value: "fa3707fbae1672d0c27bd72535b41c2b30f3c14a"
 - description: The OpenShift Namespace where the jenkins running.
   displayName: Namespace CICD
   name: NAMESPACE_CICD
@@ -138,6 +144,7 @@ objects:
                 def secretDb=""
                 def springconfig="${SPRING_CONFIG_URI}"
                 def sonarqube="${SONARQUBE_URL}"
+                def sonarqubeToken="${SONARQUBE_TOKEN}"
                 def needRouterInternal=${NEED_ROUTER_INTERNAL}
                 def needRouterPartner=${NEED_ROUTER_PARTNER}
                 def needRouterPublic=${NEED_ROUTER_PUBLIC}
@@ -173,7 +180,7 @@ objects:
                     step([$class: 'JUnitResultArchiver', testResults: '**/target/surefire-reports/TEST-*.xml'])
                   }
                   stage("Code Analysis") {
-                    sh "mvn sonar:sonar -Dsonar.host.url=${sonarqube} -DskipTests=true"
+                    sh "mvn sonar:sonar -Dsonar.host.url=${sonarqube} -Dsonar.login=${sonarqubeToken} -Dsonar.projectName=${appName} -DskipTests=true"
                   } 
                   stage("Build the Source") {
                     sh "mvn clean install -DskipTests=true"

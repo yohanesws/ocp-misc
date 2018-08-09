@@ -68,11 +68,22 @@ parameters:
   displayName: SonarQube URL
   name: SONARQUBE_URL
   required: true
+  value: "http://sonarqube-dev-sonar.app-internal.cimbthai.com"
+- description: SonarQube Token for coverage Test.
+  displayName: SonarQube Token
+  name: SONARQUBE_TOKEN
+  required: true
+  value: "fa3707fbae1672d0c27bd72535b41c2b30f3c14a"
 - description: The OpenShift Namespace where the jenkins running.
   displayName: Namespace CICD
   name: NAMESPACE_CICD
   required: true
   value: cicd
+- description: External Repository Address.
+  displayName: External Repository
+  name: EXT_REPO
+  required: true
+  value: docker.gizmo.raindrop.cimbthai.com
 - description: External Repository Credential Secret Name.
   displayName: Ext Repo Secret Credential
   name: EXT_REPO_CREDENTIAL_SECRET
@@ -143,6 +154,7 @@ objects:
                 def secretDb=""
                 def springconfig="${SPRING_CONFIG_URI}"
                 def sonarqube="${SONARQUBE_URL}"
+                def sonarqubeToken="${SONARQUBE_TOKEN}"
                 def needRouterInternal=${NEED_ROUTER_INTERNAL}
                 def needRouterPartner=${NEED_ROUTER_PARTNER}
                 def needRouterPublic=${NEED_ROUTER_PUBLIC}
@@ -150,6 +162,7 @@ objects:
                 def suffixRouterPartner="${SUFFIX_ROUTER_PARTNER}"
                 def suffixRouterPublic="${SUFFIX_ROUTER_PUBLIC}"
                 def externaRegistrySecret="${EXT_REPO_CREDENTIAL_SECRET}"
+                def extRegistry="${EXT_REPO}"
 
 
             properties([
@@ -179,7 +192,7 @@ objects:
                 step([$class: 'JUnitResultArchiver', testResults: '**/target/surefire-reports/TEST-*.xml'])
               }
               stage("Code Analysis") {
-                sh "mvn sonar:sonar -Dsonar.host.url=${sonarqube} -DskipTests=true"
+                sh "mvn sonar:sonar -Dsonar.host.url=${sonarqube} -Dsonar.login=${sonarqubeToken} -Dsonar.projectName=${appName} -DskipTests=true"
               } 
               stage("Build the Source") {
                 sh "mvn clean install -DskipTests=true"
@@ -296,13 +309,13 @@ objects:
                   
                   openshift.withProject("${projectTarget}") {
                     def imageRegistry = openshift.selector( 'is', "${appName}").object().status.dockerImageRepository
-                    echo "Promoting ${imageRegistry}:${version} -> ${registry}/staging/${appName}"
+                    echo "Promoting ${imageRegistry}:${version} -> ${extRegistry}/staging/${appName}"
                     sh """
                     set +x
                     skopeo copy --remove-signatures \
                       --src-creds openshift:${localToken} --src-cert-dir=/run/secrets/kubernetes.io/serviceaccount/ \
                       --dest-creds ${REGISTRY_USERNAME}:${REGISTRY_TOKEN}  --dest-tls-verify=false \
-                      docker://${imageRegistry}:${version} docker://${registry}/staging/${appName}:${version}
+                      docker://${imageRegistry}:${version} docker://${extRegistry}/staging/${appName}:${version}
                     """
                   }
                 }
