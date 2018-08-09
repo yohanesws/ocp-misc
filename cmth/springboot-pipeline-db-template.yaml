@@ -265,15 +265,14 @@ objects:
                       sh "oc rollout status dc/${appName}-${version} -w -n ${projectTarget}"
                       if (needRouterInternal) {
                         sh "oc create route edge ${appName}-${version}-internal  --service='${appName}-${version}' --hostname='${appName}-${version}-${projectTarget}${suffixRouterInternal}' -n ${projectTarget}"
-                        sh "oc label route ${appName}-${version}-internal exposure=internal app=${appName}-${version} -n ${projectTarget}"
+                        sh "oc label route ${appName}-${version}-internal exposure=internal -n ${projectTarget}"
                       }
                       if (needRouterPartner) {
                         sh "oc create route edge ${appName}-${version}-partner --service='${appName}-${version}' --hostname='${appName}-${version}-${projectTarget}${suffixRouterPartner}' -n ${projectTarget}"
-                        sh "oc label route ${appName}-${version}-partner exposure=partner app=${appName}-${version} -n ${projectTarget}"
+                        sh "oc label route ${appName}-${version}-partner exposure=partner -n ${projectTarget}"
                       }
                       if (needRouterPublic) {
-                        sh "oc create route edge ${appName}-${version}-public  --service='${appName}-${version}' --hostname='${appName}-${version}-${projectTarget}${suffixRouterPublic}' -n ${projectTarget}" 
-                        sh "oc label route ${appName}-${version}-public app=${appName}-${version} -n ${projectTarget}"
+                        sh "oc create route edge ${appName}-${version}-public  --service='${appName}-${version}' --hostname='${appName}-${version}-${projectTarget}${suffixRouterPublic}' -n ${projectTarget}"
                       }
                     }
                   }
