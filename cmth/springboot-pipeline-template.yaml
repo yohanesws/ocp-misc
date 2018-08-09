@@ -8,7 +8,7 @@ message: |-
   it using your OpenShift user credentials.
 metadata:
   annotations:
-    openshift.io/display-name: Spring Boot SIT Pipeline no Database
+    openshift.io/display-name: Spring Boot SIT Pipeline no Database Config
     description: |-
       This template showcases the new Jenkins Pipeline integration for spring boot in OpenShift,
       which performs continuous integration and deployment right on the platform.
@@ -36,9 +36,19 @@ parameters:
   displayName: Spring Config URI
   name: SPRING_CONFIG_URI
   required: true
-- description: Need Router
-  displayName: Need Router
-  name: NEED_ROUTER
+- description: Need Router Internal
+  displayName: Router Internal
+  name: NEED_ROUTER_INTERNAL
+  required: true
+  value: "false"
+- description: Need Router Partner
+  displayName: Router Partner
+  name: NEED_ROUTER_PARTNER
+  required: true
+  value: "false"
+- description: Need Router Public
+  displayName: Router Public
+  name: NEED_ROUTER_PUBLIC
   required: true
   value: "false"
 - description: The URL of the repository with your application source code.
@@ -54,6 +64,10 @@ parameters:
   name: SOURCE_REPOSITORY_CREDENTIAL_SECRET
   required: true
   value: gitlab-cimb
+- description: SonarQube URL for coverage Test.
+  displayName: SonarQube URL
+  name: SONARQUBE_URL
+  required: true
 - description: The OpenShift Namespace where the jenkins running.
   displayName: Namespace CICD
   name: NAMESPACE_CICD
@@ -86,6 +100,21 @@ parameters:
   generate: expression
   name: GENERIC_WEBHOOK_SECRET
   required: true
+- description: Suffix Router Internal
+  displayName: Suffix Router Internal
+  name: SUFFIX_ROUTER_INTERNAL
+  required: true
+  value: ".app-internal.cimbthai.com"
+- description: Suffix Router Partner
+  displayName: Suffix Router Partner
+  name: SUFFIX_ROUTER_PARTNER
+  required: true
+  value: ".app-partner.cimbthai.com"
+- description: Suffix Router Public
+  displayName: Suffix Router Public
+  name: SUFFIX_ROUTER_PUBLIC
+  required: true
+  value: ".app-public.cimbthai.com"
 objects:
 - apiVersion: v1
   kind: BuildConfig
@@ -106,9 +135,15 @@ objects:
                 def branch="${SOURCE_REPOSITORY_BRANCH}"
                 def secretName="${SOURCE_REPOSITORY_CREDENTIAL_SECRET}"
                 def version=""
-                def needroute="${NEED_ROUTER}"
                 def secretDb=""
                 def springconfig="${SPRING_CONFIG_URI}"
+                def sonarqube="${SONARQUBE_URL}"
+                def needRouterInternal=${NEED_ROUTER_INTERNAL}
+                def needRouterPartner=${NEED_ROUTER_PARTNER}
+                def needRouterPublic=${NEED_ROUTER_PUBLIC}
+                def suffixRouterInternal="${SUFFIX_ROUTER_INTERNAL}"
+                def suffixRouterPartner="${SUFFIX_ROUTER_PARTNER}"
+                def suffixRouterPublic="${SUFFIX_ROUTER_PUBLIC}"
 
 
                 properties([
@@ -133,6 +168,13 @@ objects:
                       version="latest"
                     echo "version : ${version}"
                   }
+                  stage ("Unit Test"){
+                    sh "mvn test"
+                    step([$class: 'JUnitResultArchiver', testResults: '**/target/surefire-reports/TEST-*.xml'])
+                  }
+                  stage("Code Analysis") {
+                    sh "${mvnCmd} sonar:sonar -Dsonar.host.url=${sonarqube} -DskipTests=true"
+                  } 
                   stage("Build the Source") {
                     sh "mvn clean install -DskipTests=true"
                     sh "rm -rf oc-build && mkdir -p oc-build/deployments"
@@ -193,8 +235,18 @@ objects:
                     }
                     sh "oc rollout resume dc/${appName}-${version} -n ${projectTarget}"  
                     sh "oc rollout status dc/${appName}-${version} -w -n ${projectTarget}"
-                    if (needroute)
-                      sh "oc expose svc/${appName}-${version} -n ${projectTarget}"
+                    if (needRouterInternal) {
+                      sh "oc create route edge ${appName}-${version}-internal  --service='${appName}-${version}' --hostname='${appName}-${version}-${projectTarget}${suffixRouterInternal}' -n ${projectTarget}"
+                      sh "oc label route ${appName}-${version}-internal exposure=internal app=${appName}-${version} -n ${projectTarget}"
+                    }
+                    if (needRouterPartner) {
+                      sh "oc create route edge ${appName}-${version}-partner --service='${appName}-${version}' --hostname='${appName}-${version}-${projectTarget}${suffixRouterPartner}' -n ${projectTarget}"
+                      sh "oc label route ${appName}-${version}-partner exposure=partner app=${appName}-${version} -n ${projectTarget}"
+                    }
+                    if (needRouterPublic) {
+                      sh "oc create route edge ${appName}-${version}-public  --service='${appName}-${version}' --hostname='${appName}-${version}-${projectTarget}${suffixRouterPublic}' -n ${projectTarget}" 
+                       sh "oc label route ${appName}-${version}-public app=${appName}-${version} -n ${projectTarget}"
+                    }
                   }
                 }
             }
