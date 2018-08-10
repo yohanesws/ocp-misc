@@ -88,6 +88,11 @@ parameters:
   name: NAMESPACE_CICD
   required: true
   value: cicd
+- description: External Repository Address.
+  displayName: External Repository
+  name: EXT_REPO
+  required: true
+  value: docker.gizmo.raindrop.cimbthai.com
 - description: External Repository Credential Secret Name.
   displayName: Ext Repo Secret Credential
   name: EXT_REPO_CREDENTIAL_SECRET
