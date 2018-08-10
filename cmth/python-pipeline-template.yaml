@@ -200,6 +200,7 @@ objects:
                         bcNotPresent = true
                       }
                       if (bcNotPresent) {
+                        sh "oc export secret/${secretName} -n ${projectCicd} | oc create -n ${projectTarget} -f - "
                         sh "oc new-build ${NAMESPACE_BUILDER}/${IMAGE_BUILDER}:${IMAGE_VERSION}~${gitRepo} --source-secret=${secretName} --name=${appName} -n ${projectTarget}"
                         sh "oc cancel-build bc/${appName} -n ${projectTarget}"
                         sh "oc env bc/${appName} GIT_SSL_NO_VERIFY=true PIP_INDEX_URL=${PIP_INDEX_URL} PIP_TRUSTED_HOST=${PIP_TRUSTED_HOST} -n ${projectTarget}"
