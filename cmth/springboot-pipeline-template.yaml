@@ -190,7 +190,7 @@ objects:
                     stage("Build Image") {
                       sh "oc project ${projectTarget}"
                       //create JAVA S2I Binary Build
-                      sh "oc new-build openshift/redhat-openjdk18-openshift:1.4 --name=${appName} --binary  -n ${projectTarget} || true"
+                      sh "oc new-build ${NAMESPACE_BUILDER}/${IMAGE_BUILDER}:${IMAGE_VERSION} --name=${appName} --binary  -n ${projectTarget} || true"
                       // start build
                       sh "oc start-build ${appName} -n ${projectTarget} --from-file=oc-build/deployments/APP.jar --follow --wait"
                       sh "oc tag ${projectTarget}/${appName}:latest ${projectTarget}/${appName}:${version}"
