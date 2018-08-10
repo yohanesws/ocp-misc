@@ -162,6 +162,7 @@ objects:
                   def suffixRouterPartner="${SUFFIX_ROUTER_PARTNER}"
                   def suffixRouterPublic="${SUFFIX_ROUTER_PUBLIC}"
                   def externaRegistrySecret="${EXT_REPO_CREDENTIAL_SECRET}"
+                  def extRegistry="${EXT_REPO}"
 
 
               properties([
