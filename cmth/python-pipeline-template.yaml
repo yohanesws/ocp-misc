@@ -1,0 +1,303 @@
+apiVersion: v1
+kind: Template
+labels:
+  template: python-pipeline-template
+message: |-
+  A Jenkins server will be automatically instantiated in this project to manage
+  the Pipeline BuildConfig created by this template.  You will be able to log in to
+  it using your OpenShift user credentials.
+metadata:
+  annotations:
+    openshift.io/display-name: Python Pipeline
+    description: |-
+      This template showcases the new Jenkins Pipeline integration for spring boot in OpenShift,
+      which performs continuous integration and deployment right on the platform.
+      The template contains a Jenkinsfile - a definition of a multi-stage CI/CD process - that
+      leverages the underlying OpenShift platform for dynamic and scalable
+      builds. OpenShift integrates the status of your pipeline builds into the web
+      console allowing you to see your entire application lifecycle in a single view.
+    iconClass: icon-jenkins
+    tags: instant-app,python,jenkins
+  name: python-pipeline-template
+parameters:
+- description: The name assigned to pipeline defined in this template.
+  displayName: Pipeline Name
+  name: PIPELINE_NAME
+  required: true
+- description: The name assigned to application defined in this template.
+  displayName: Application Name
+  name: APP_NAME
+  required: true
+- description: The namespace/project of which the application is assigned.
+  displayName: Application Namespace/Project
+  name: APP_NAMESPACE
+  required: true
+- description: Need Router Internal
+  displayName: Router Internal
+  name: NEED_ROUTER_INTERNAL
+  required: true
+  value: "false"
+- description: Need Router Partner
+  displayName: Router Partner
+  name: NEED_ROUTER_PARTNER
+  required: true
+  value: "false"
+- description: Need Router Public
+  displayName: Router Public
+  name: NEED_ROUTER_PUBLIC
+  required: true
+  value: "false"
+- description: The URL of the repository with your application source code.
+  displayName: Git Repository URL
+  name: SOURCE_REPOSITORY_URL
+  required: true
+- description: The Branch of the repository with your application source code.
+  displayName: Git Repository Branch
+  name: SOURCE_REPOSITORY_BRANCH
+  required: true
+- description: Git Credential Secret.
+  displayName: Git Secret Credential
+  name: SOURCE_REPOSITORY_CREDENTIAL_SECRET
+  required: true
+  value: gitlab-cimb
+- description: Python Setting File Path.
+  displayName: Setting File
+  name: PYTHON_SETTING_FILE
+  required: true
+  value: operation_tool/settings.py
+- description: Python Setting File Name.
+  displayName: Setting File Name
+  name: PYTHON_SETTING_FILE_NAME
+  required: true
+  value: settings.py
+- description: Need Promote To Ext REGISTRY
+  displayName: Need Promote
+  name: NEED_PROMOTE
+  required: true
+  value: "false"
+- description: External Repository Address.
+  displayName: External Repository
+  name: EXT_REPO
+  required: true
+  value: docker.gizmo.raindrop.cimbthai.com
+- description: External Repository Credential Secret Name.
+  displayName: Ext Repo Secret Credential
+  name: EXT_REPO_CREDENTIAL_SECRET
+  required: true
+  value: external-registry-cimb
+- description: The OpenShift Namespace where the jenkins running.
+  displayName: Namespace CICD
+  name: NAMESPACE_CICD
+  required: true
+  value: cicd
+- description: The OpenShift Namespace where the builder ImageStreams reside.
+  displayName: Namespace Builder
+  name: NAMESPACE_BUILDER
+  required: true
+  value: openshift
+- description: The name of OpenJDK builder ImageStreams to used.
+  displayName: OpenJDK Builder
+  name: IMAGE_BUILDER
+  value: "python"
+  required: true
+- description: The version of OpenJDK builder ImageStreams to used.
+  displayName: Version Builder
+  name: IMAGE_VERSION
+  required: true
+  value: "3.6"
+- description: Github trigger secret.  A difficult to guess string encoded as part of the webhook URL.  Not encrypted.
+  displayName: GitHub Webhook Secret
+  from: '[a-zA-Z0-9]{40}'
+  generate: expression
+  name: GITHUB_WEBHOOK_SECRET
+  required: true
+- description: A secret string used to configure the Generic webhook.
+  displayName: Generic Webhook Secret
+  from: '[a-zA-Z0-9]{40}'
+  generate: expression
+  name: GENERIC_WEBHOOK_SECRET
+  required: true
+- description: Suffix Router Internal
+  displayName: Suffix Router Internal
+  name: SUFFIX_ROUTER_INTERNAL
+  required: true
+  value: ".app-internal.cimbthai.com"
+- description: Suffix Router Partner
+  displayName: Suffix Router Partner
+  name: SUFFIX_ROUTER_PARTNER
+  required: true
+  value: ".app-partner.cimbthai.com"
+- description: Suffix Router Public
+  displayName: Suffix Router Public
+  name: SUFFIX_ROUTER_PUBLIC
+  required: true
+  value: ".app-public.cimbthai.com"
+- description: PIP custom index URL or mirror to download required packages during build process
+  displayName: PIP custom index URL  
+  name: PIP_INDEX_URL
+  required: true
+  value: "https://depo.gizmo.raindrop.cimbthai.com/artifactory/api/pypi/python/simple"
+- description: PIP ustom trusted host to download required packages during build process
+  displayName: PIP trusted host 
+  name: PIP_TRUSTED_HOST
+  required: true
+  value: "depo.gizmo.raindrop.cimbthai.com"
+objects:
+- apiVersion: v1
+  kind: BuildConfig
+  metadata:
+    labels:
+      name: ${PIPELINE_NAME}
+    name: ${PIPELINE_NAME}
+  spec:
+    strategy:
+      jenkinsPipelineStrategy:
+        jenkinsfile: |-
+            try {
+                timeout(time: 20, unit: 'MINUTES') {
+                  def appName="${APP_NAME}"
+                  def projectTarget="${APP_NAMESPACE}"
+                  def projectCicd="${NAMESPACE_CICD}"
+                  def gitRepo="${SOURCE_REPOSITORY_URL}"
+                  def branch="${SOURCE_REPOSITORY_BRANCH}"
+                  def secretName="${SOURCE_REPOSITORY_CREDENTIAL_SECRET}"
+                  def version=""
+                  def needRouterInternal=${NEED_ROUTER_INTERNAL}
+                  def needRouterPartner=${NEED_ROUTER_PARTNER}
+                  def needRouterPublic=${NEED_ROUTER_PUBLIC}
+                  def suffixRouterInternal="${SUFFIX_ROUTER_INTERNAL}"
+                  def suffixRouterPartner="${SUFFIX_ROUTER_PARTNER}"
+                  def suffixRouterPublic="${SUFFIX_ROUTER_PUBLIC}"
+                  def needPromote=${NEED_PROMOTE}
+                  def externaRegistrySecret="${EXT_REPO_CREDENTIAL_SECRET}"
+                  def extRegistry="${EXT_REPO}"
+
+
+                  properties([
+                    pipelineTriggers([
+                        pollSCM('H/5 * * * *')
+                    ])
+                  ])
+
+
+                  node () {
+                    stage("Cloning"){
+                      git branch: branch, url: gitRepo , credentialsId: "${projectCicd}-${secretName}",  poll: true, changelog: true
+                      sh "git for-each-ref --sort=taggerdate --count=1 --format '%(refname:short)' refs/tags | tr -d '\n'| tr '.' '-'> latesttag.txt"
+                      //sh "cat latesttag.txt|  tr -d '\n' > tag.txt"
+                      version=readFile('latesttag.txt')
+                      if (version == "")
+                        version="latest"
+                      echo "version : ${version}"
+                    }
+                    stage("Building") {
+                      sh "oc project ${projectTarget}"
+                      //create PYTHON S2I Binary Build
+                      def bcNotPresent = false
+                      try {
+                        sh "oc get bc ${appName} -o jsonpath='{.metadata.name}' -n ${projectTarget}"
+                      }catch(err){
+                        bcNotPresent = true
+                      }
+                      if (bcNotPresent) {
+                        sh "oc new-build ${NAMESPACE_BUILDER}/${IMAGE_BUILDER}:${IMAGE_VERSION} --name=${appName} -n ${projectTarget}"
+                        sh "oc cancel-build bc/${appName} -n ${projectTarget}"
+                        sh "oc env bc/${appName} PIP_INDEX_URL=${PIP_INDEX_URL} PIP_TRUSTED_HOST=${PIP_TRUSTED_HOST} -n ${projectTarget}"
+                      }
+                      // start build
+                      sh "oc start-build ${appName} -n ${projectTarget} --from-file=oc-build/deployments/APP.jar --follow --wait"
+                      sh "oc tag ${projectTarget}/${appName}:latest ${projectTarget}/${appName}:${version}-ready"
+                    }
+                    stage ("Configuring") {
+                      def cmNotPresent = false
+                      try {
+                        sh "oc get cm ${appName}-${version}-cm -o jsonpath='{.metadata.name}' -n ${projectTarget}"
+                      }catch(err){
+                        cmNotPresent = true
+                      }
+                      if (cmNotPresent){
+                        sh "chmod -R 777 ${PYTHON_SETTING_FILE}"
+                        //creating configmap
+                        sh "oc create cm ${appName}-${version}-cm --from-file=${PYTHON_SETTING_FILE} -n ${projectTarget}"
+                        sh "oc label cm/${appName}-${version}-cm app=${appName}-${version} -n ${projectTarget}"
+                      }
+                    }
+                    stage("Deploying") {
+                      def dcNotPresent = false
+                      try {
+                        sh "oc get dc ${appName}-${version} -o jsonpath='{.metadata.name}' -n ${projectTarget}"
+                      }catch(err){
+                        dcNotPresent = true
+                      }
+                      
+                      if (dcNotPresent){
+                        sh "oc tag ${projectTarget}/${appName}:${version}-ready ${projectTarget}/${appName}:${version}"
+                        sh "oc new-app --docker-image=docker-registry.default.svc:5000/${projectTarget}/${appName}:${version} --name=${appName}-${version} -n ${projectTarget} || true"
+                        sh "oc rollout cancel dc/${appName}-${version} -n ${projectTarget} || true"
+                        sh "oc rollout pause dc/${appName}-${version} -n ${projectTarget}"  
+                        sh "oc set volume dc/${appName}-${version} -n ${projectTarget} --add --name=config-volume -t configmap --configmap-name=${appName}-${version}-cm --mount-path=${PYTHON_SETTING_FILE} --sub-path=${PYTHON_SETTING_FILE_NAME} || true"
+
+                        //apply timezone
+                        sh "oc set env dc/${appName}-${version} TZ=Asia/Bangkok -n ${projectTarget}"
+                        sh "oc rollout resume dc/${appName}-${version} -n ${projectTarget}"  
+                        sh "oc rollout status dc/${appName}-${version} -w -n ${projectTarget}"
+                        if (needRouterInternal) {
+                          sh "oc create route edge ${appName}-${version}-internal  --service='${appName}-${version}' --hostname='${appName}-${version}-${projectTarget}${suffixRouterInternal}' -n ${projectTarget}"
+                          sh "oc label route ${appName}-${version}-internal exposure=internal -n ${projectTarget}"
+                        }
+                        if (needRouterPartner) {
+                          sh "oc create route edge ${appName}-${version}-partner --service='${appName}-${version}' --hostname='${appName}-${version}-${projectTarget}${suffixRouterPartner}' -n ${projectTarget}"
+                          sh "oc label route ${appName}-${version}-partner exposure=partner -n ${projectTarget}"
+                        }
+                        if (needRouterPublic) {
+                          sh "oc create route edge ${appName}-${version}-public  --service='${appName}-${version}' --hostname='${appName}-${version}-${projectTarget}${suffixRouterPublic}' -n ${projectTarget}"
+                        }
+                      }else {
+                        sh "oc rollout pause dc/${appName}-${version} -n ${projectTarget}"  
+                        sh "oc tag ${projectTarget}/${appName}:${version}-ready ${projectTarget}/${appName}:${version}"
+                        sh "oc rollout resume dc/${appName}-${version} -n ${projectTarget}"  
+                        sh "oc rollout status dc/${appName}-${version} -w -n ${projectTarget}"
+                        echo "just update the image"
+                      }
+
+                    }
+                  }
+                  if(needPromote){
+                    node ("image-mgmt"){
+                      stage("Promote"){
+                        timeout (time:120, unit: 'MINUTES'){
+                            input message : "Promote to External Registry", ok:"Promote"
+                        }
+                        withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: '${NAMESPACE_CICD}-${EXT_REPO_CREDENTIAL_SECRET}', usernameVariable: 'REGISTRY_USERNAME', passwordVariable:"REGISTRY_TOKEN"]]){
+                          def localToken = readFile('/var/run/secrets/kubernetes.io/serviceaccount/token').trim()
+                          
+                          sh "oc get is/${appName} -n ${projectTarget} -o template --template='{{.status.dockerImageRepository}}'| tr -d '\n' > internalRepo"
+                          def imageRegistry = readFile('internalRepo')
+
+                          echo "Promoting ${imageRegistry}:${version} -> ${extRegistry}/${projectTarget}/${appName}"
+                          sh """
+                          set +x
+                          skopeo copy --remove-signatures \
+                            --src-creds openshift:${localToken} --src-cert-dir=/run/secrets/kubernetes.io/serviceaccount/ \
+                            --dest-creds ${REGISTRY_USERNAME}:${REGISTRY_TOKEN}  --dest-tls-verify=false \
+                            docker://${imageRegistry}:${version} docker://${extRegistry}/${projectTarget}/${appName}:${version}
+                          """
+                        }
+                      }
+                    }
+                  }
+              }
+            } catch (err) {
+                echo "in catch block"
+                echo "Caught: ${err}"
+                currentBuild.result = 'FAILURE'
+                throw err
+            } // JenkinsPipeline
+      type: JenkinsPipeline
+    triggers:
+    - github:
+        secret: ${GITHUB_WEBHOOK_SECRET}
+      type: GitHub
+    - generic:
+        secret: ${GENERIC_WEBHOOK_SECRET}
+      type: Generic
