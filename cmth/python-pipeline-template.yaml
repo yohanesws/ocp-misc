@@ -200,9 +200,9 @@ objects:
                         bcNotPresent = true
                       }
                       if (bcNotPresent) {
-                        sh "oc new-build ${NAMESPACE_BUILDER}/${IMAGE_BUILDER}:${IMAGE_VERSION} --name=${appName} -n ${projectTarget}"
+                        sh "oc new-build ${NAMESPACE_BUILDER}/${IMAGE_BUILDER}:${IMAGE_VERSION} --source-secret=${secretName} --name=${appName} -n ${projectTarget}"
                         sh "oc cancel-build bc/${appName} -n ${projectTarget}"
-                        sh "oc env bc/${appName} PIP_INDEX_URL=${PIP_INDEX_URL} PIP_TRUSTED_HOST=${PIP_TRUSTED_HOST} -n ${projectTarget}"
+                        sh "oc env bc/${appName} GIT_SSL_NO_VERIFY=true PIP_INDEX_URL=${PIP_INDEX_URL} PIP_TRUSTED_HOST=${PIP_TRUSTED_HOST} -n ${projectTarget}"
                       }
                       // start build
                       sh "oc start-build ${appName} -n ${projectTarget} --from-file=oc-build/deployments/APP.jar --follow --wait"
