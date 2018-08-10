@@ -205,7 +205,7 @@ objects:
                         sh "oc env bc/${appName} GIT_SSL_NO_VERIFY=true PIP_INDEX_URL=${PIP_INDEX_URL} PIP_TRUSTED_HOST=${PIP_TRUSTED_HOST} -n ${projectTarget}"
                       }
                       // start build
-                      sh "oc start-build ${appName} -n ${projectTarget} --from-file=oc-build/deployments/APP.jar --follow --wait"
+                      sh "oc start-build ${appName} -n ${projectTarget} --follow --wait"
                       sh "oc tag ${projectTarget}/${appName}:latest ${projectTarget}/${appName}:${version}-ready"
                     }
                     stage ("Configuring") {
