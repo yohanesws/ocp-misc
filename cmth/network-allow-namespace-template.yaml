@@ -1,0 +1,42 @@
+apiVersion: v1
+kind: Template
+metadata:
+  name: network-policy-allow-namespace-template
+  annotations:
+    openshift.io/display-name: Network Policy Allow Other Namespace
+    description: |-
+      This template showcases network policy to allow internal network in same namespace
+      and allow traffic from specific namespace
+    tags: 
+parameters:
+- name: SOURCE_NAMESPACE
+  description: Source Namespace
+  required: true
+- name: TARGET_NAMESPACE
+  description: Target Namespace
+  required: true
+objects:
+- kind: NetworkPolicy
+  apiVersion: networking.k8s.io/v1
+  metadata:
+    name: allow-same-namespace-${TARGET_NAMESPACE} 
+  spec:
+    namespaceSelector:
+      matchLabels:
+        name: ${TARGET_NAMESPACE} 
+    ingress:
+    - from:
+      - podSelector: {}
+- kind: NetworkPolicy
+  apiVersion: networking.k8s.io/v1
+  metadata:
+    name: allow-from-${SOURCE_NAMESPACE}-namespace-to-${TARGET_NAMESPACE} 
+  spec:
+    namespaceSelector:
+      matchLabels:
+        name: ${TARGET_NAMESPACE} 
+    ingress:
+    - from:
+      - namespaceSelector:
+          matchLabels:
+            name: ${SOURCE_NAMESPACE}
