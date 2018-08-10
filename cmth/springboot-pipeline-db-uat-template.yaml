@@ -173,7 +173,7 @@ objects:
                   def branch="${SOURCE_REPOSITORY_BRANCH}"
                   def secretName="${SOURCE_REPOSITORY_CREDENTIAL_SECRET}"
                   def version=""
-                  def secretDb=""
+                  def secretDb="${PIPELINE_NAME}-db-secret"
                   def springconfig="${SPRING_CONFIG_URI}"
                   def sonarqube="${SONARQUBE_URL}"
                   def sonarqubeToken="${SONARQUBE_TOKEN}"
