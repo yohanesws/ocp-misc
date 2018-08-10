@@ -162,7 +162,6 @@ objects:
                   def suffixRouterPartner="${SUFFIX_ROUTER_PARTNER}"
                   def suffixRouterPublic="${SUFFIX_ROUTER_PUBLIC}"
                   def externaRegistrySecret="${EXT_REPO_CREDENTIAL_SECRET}"
-                  def extRegistry="${EXT_REPO}"
 
 
               properties([
@@ -303,20 +302,20 @@ objects:
                   timeout (time:120, unit: 'MINUTES'){
                       input message : "Promote to External Registry", ok:"Promote"
                   }
-                  withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: '${projectCicd}-${externaRegistrySecret}', usernameVariable: 'REGISTRY_USERNAME', passwordVariable:"REGISTRY_TOKEN"]]){
+                  withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: '${NAMESPACE_CICD}-${EXT_REPO_CREDENTIAL_SECRET}', usernameVariable: 'REGISTRY_USERNAME', passwordVariable:"REGISTRY_TOKEN"]]){
                     def localToken = readFile('/var/run/secrets/kubernetes.io/serviceaccount/token').trim()
                     
-                    openshift.withProject("${projectTarget}") {
-                      def imageRegistry = openshift.selector( 'is', "${appName}").object().status.dockerImageRepository
-                      echo "Promoting ${imageRegistry}:${version} -> ${extRegistry}/staging/${appName}"
-                      sh """
-                      set +x
-                      skopeo copy --remove-signatures \
-                        --src-creds openshift:${localToken} --src-cert-dir=/run/secrets/kubernetes.io/serviceaccount/ \
-                        --dest-creds ${REGISTRY_USERNAME}:${REGISTRY_TOKEN}  --dest-tls-verify=false \
-                        docker://${imageRegistry}:${version} docker://${extRegistry}/staging/${appName}:${version}
-                      """
-                    }
+                    sh "oc get is sonarqube -n ${projectTarget} -o template --template='{{.status.dockerImageRepository}}'| tr -d '\n' > internalRepo"
+                    def imageRegistry = readFile('internalRepo')
+
+                    echo "Promoting ${imageRegistry}:${version} -> ${extRegistry}/${projectTarget}/${appName}"
+                    sh """
+                    set +x
+                    skopeo copy --remove-signatures \
+                      --src-creds openshift:${localToken} --src-cert-dir=/run/secrets/kubernetes.io/serviceaccount/ \
+                      --dest-creds ${REGISTRY_USERNAME}:${REGISTRY_TOKEN}  --dest-tls-verify=false \
+                      docker://${imageRegistry}:${version} docker://${extRegistry}/${projectTarget}/${appName}:${version}
+                    """
                   }
                 }
               }
