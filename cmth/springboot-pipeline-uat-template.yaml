@@ -306,7 +306,7 @@ objects:
                   withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: '${NAMESPACE_CICD}-${EXT_REPO_CREDENTIAL_SECRET}', usernameVariable: 'REGISTRY_USERNAME', passwordVariable:"REGISTRY_TOKEN"]]){
                     def localToken = readFile('/var/run/secrets/kubernetes.io/serviceaccount/token').trim()
                     
-                    sh "oc get is sonarqube -n ${projectTarget} -o template --template='{{.status.dockerImageRepository}}'| tr -d '\n' > internalRepo"
+                    sh "oc get is/${appName} -n ${projectTarget} -o template --template='{{.status.dockerImageRepository}}'| tr -d '\n' > internalRepo"
                     def imageRegistry = readFile('internalRepo')
 
                     echo "Promoting ${imageRegistry}:${version} -> ${extRegistry}/${projectTarget}/${appName}"
