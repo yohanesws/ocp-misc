@@ -236,7 +236,7 @@ objects:
                         sh "oc new-app --docker-image=docker-registry.default.svc:5000/${projectTarget}/${appName}:${version} --name=${appName}-${version} -n ${projectTarget} || true"
                         sh "oc rollout cancel dc/${appName}-${version} -n ${projectTarget} || true"
                         sh "oc rollout pause dc/${appName}-${version} -n ${projectTarget}"  
-                        sh "oc set volume dc/${appName}-${version} -n ${projectTarget} --add --name=config-volume -t configmap --configmap-name=${appName}-${version}-cm --mount-path=${PYTHON_SETTING_FILE} --sub-path=${PYTHON_SETTING_FILE_NAME} || true"
+                        sh "oc set volume dc/${appName}-${version} -n ${projectTarget} --add --name=config-volume -t configmap --configmap-name=${appName}-${version}-cm --mount-path=/opt/app-root/src/${PYTHON_SETTING_FILE} --sub-path=${PYTHON_SETTING_FILE_NAME} || true"
 
                         //apply timezone
                         sh "oc set env dc/${appName}-${version} TZ=Asia/Bangkok DISABLE_MIGRATE=true -n ${projectTarget}"
