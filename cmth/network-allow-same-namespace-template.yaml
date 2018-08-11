@@ -35,4 +35,15 @@ objects:
     - from:
       - namespaceSelector:
           matchLabels:
+            name: ${SOURCE_NAMESPACE}
+- kind: NetworkPolicy
+  apiVersion: networking.k8s.io/v1
+  metadata:
+    name: allow-from-${SOURCE_NAMESPACE}-namespace-to-${TARGET_NAMESPACE} 
+  spec:
+    podSelector:
+    ingress:
+    - from:
+      - namespaceSelector:
+          matchLabels:
             name: default

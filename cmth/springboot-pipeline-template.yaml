@@ -168,7 +168,7 @@ objects:
                   node ('maven') {
                     stage("Cloning"){
                       git branch: branch, url: gitRepo , credentialsId: "${projectCicd}-${secretName}"
-                      sh "git for-each-ref --sort=taggerdate --count=1 --format '%(refname:short)' refs/tags | tr -d '\n'| tr '.' '-'> latesttag.txt"
+                      sh "git for-each-ref --sort=-taggerdate --count=1 --format '%(refname:short)' refs/tags | cut -d '.' -f 1 | tr -d '\n' > latesttag.txt"
                       //sh "cat latesttag.txt|  tr -d '\n' > tag.txt"
                       version=readFile('latesttag.txt')
                       if (version == "")
