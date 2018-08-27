@@ -1,0 +1,155 @@
+apiVersion: v1
+kind: Template
+labels:
+  template: promote-pipeline-template
+message: |-
+  A Jenkins server will be automatically instantiated in this project to manage
+  the Pipeline BuildConfig created by this template.  You will be able to log in to
+  it using your OpenShift user credentials.
+metadata:
+  annotations:
+    openshift.io/display-name: Promote same cluster Generic Pipeline 
+    description: |-
+      This template showcases the new Jenkins Pipeline integration for spring boot in OpenShift,
+      which performs continuous integration and deployment right on the platform.
+      The template contains a Jenkinsfile - a definition of a multi-stage CI/CD process - that
+      leverages the underlying OpenShift platform for dynamic and scalable
+      builds. OpenShift integrates the status of your pipeline builds into the web
+      console allowing you to see your entire application lifecycle in a single view.
+    iconClass: icon-jenkins
+    tags: instant-app,promote,jenkins
+  name: promote-pipeline-template
+parameters:
+- description: The name assigned to pipeline defined in this template.
+  displayName: Pipeline Name
+  name: PIPELINE_NAME
+  required: true
+- description: The name assigned to application defined in this template.
+  displayName: Application Name
+  name: APP_NAME
+  required: true
+- description: The namespace/project of which the application is running now.
+  displayName: Source Application Namespace/Project
+  name: SOURCE_APP_NAMESPACE
+  required: true
+- description: The namespace/project of which the application is move to.
+  displayName: Destinatition Application Namespace/Project
+  name: DEST_APP_NAMESPACE
+  required: true
+- description: The configmap name that need to load as environment variable.
+  displayName: Config Map EAP
+  name: CONFIG_MAP_EAP
+- description: The secret name that need to load as environment variable.
+  displayName: Secret  Database
+  name: SECRET_DATABASE
+- description: Github trigger secret.  A difficult to guess string encoded as part of the webhook URL.  Not encrypted.
+  displayName: GitHub Webhook Secret
+  from: '[a-zA-Z0-9]{40}'
+  generate: expression
+  name: GITHUB_WEBHOOK_SECRET
+  required: true
+- description: A secret string used to configure the Generic webhook.
+  displayName: Generic Webhook Secret
+  from: '[a-zA-Z0-9]{40}'
+  generate: expression
+  name: GENERIC_WEBHOOK_SECRET
+  required: true
+objects:
+- apiVersion: v1
+  kind: BuildConfig
+  metadata:
+    labels:
+      name: ${PIPELINE_NAME}
+    name: ${PIPELINE_NAME}
+  spec:
+    strategy:
+      jenkinsPipelineStrategy:
+        jenkinsfile: |-
+            try {
+                timeout(time: 20, unit: 'MINUTES') {
+                  def appName="${APP_NAME}"
+                  def projectTarget="${DEST_APP_NAMESPACE}"
+                  def projectSource="${SOURCE_APP_NAMESPACE}"
+                  def configMap="${CONFIG_MAP_EAP}"
+                  def secretDb="${SECRET_DATABASE}"
+                  def version=""
+
+
+                  node () {
+                    stage("Preparing"){
+                     sh "oc get is/${appName} -o -o jsonpath='{.spec.tags.*.name}' -n ${projectSource} > version"
+                     versions = readFile('version')
+                     
+                     versions = versions.replaceAll("\\s","\n")
+                     timeout (time:10, unit: 'MINUTES'){
+                       env.APP= input message : "promote ${APP_NAME} from ${SOURCE_APP_NAMESPACE} to ${DEST_APP_NAMESPACE}", ok:"Promote",
+                                                parameters: [choice(name:'VERSION', choices:versions, description: 'Name App to Promote')]
+                      }
+                      version=env.VERSION
+                      echo "version selected ${version}"
+                    }
+                    
+                    stage("Move Image") {
+                       sh "oc tag ${projectSource}/${appName}:${version} ${projectTarget}/${appName}:${version}"
+                    }
+                    stage ("Configuring") {
+                      if (configMap!=""){
+                         sh "oc export cm/${configMap} -n ${projectSource} | oc create -n ${projectTarget} -f -|| true"
+                      }
+                      if (secretDb!=""){
+                         sh "oc export secret/${secretDb} -n ${projectSource} | oc create -n ${projectTarget} -f -|| true"
+                      }
+                      
+                    }
+                    stage("Deploying") {
+                      def dcNotPresent = false
+                      try {
+                        sh "oc get dc ${appName}-${version} -o jsonpath='{.metadata.name}' -n ${projectTarget}"
+                      }catch(err){
+                        dcNotPresent = true
+                      }
+
+                      if (dcNotPresent){
+                        sh "oc tag ${projectTarget}/${appName}:${version} ${projectTarget}/${appName}:deploy-${version}"
+                        sh "oc new-app --docker-image=docker-registry.default.svc:5000/${projectTarget}/${appName}:deploy-${version} --name=${appName}-${version} -n ${projectTarget} || true"
+                        sh "oc rollout cancel dc/${appName}-${version} -n ${projectTarget} || true"deploy
+                        sh "oc rollout pause dc/${appName}-${version} -n ${projectTarget}"  
+                        // sh "oc set volume dc/${appName}-${version} -n ${projectTarget} --add --name=config-volume -t configmap --configmap-name=${appName}-${version}-cm --mount-path=/deployments/config || true"
+                        if (configMap !=  ""){
+                          sh "oc set env --from=secret/${appName}-${version}-db dc/${appName}-${version} -n ${projectTarget}"
+                        }
+                        if (secretDb !=  ""){
+                          sh "oc set env --from=secret/${appName}-${version}-db --prefix=EXTERNAL_DATABASE_ dc/${appName}-${version} -n ${projectTarget}"
+                        }
+                        //apply timezone
+                        sh "oc set env dc/${appName}-${version} TZ=Asia/Bangkok -n ${projectTarget}"
+
+                        sh "oc rollout resume dc/${appName}-${version} -n ${projectTarget}"  
+                        sh "oc rollout status dc/${appName}-${version} -w -n ${projectTarget}"
+
+                        sh "oc create route edge ${appName}-${version}  --service='${appName}-${version}' -n ${projectTarget}"
+                        
+                      }else{
+                        sh "oc rollout pause dc/${appName}-${version} -n ${projectTarget}"  
+                        sh "oc tag ${projectTarget}/${appName}:${version} ${projectTarget}/${appName}:deploy-${version}"
+                        sh "oc rollout resume dc/${appName}-${version} -n ${projectTarget}"  
+                        sh "oc rollout status dc/${appName}-${version} -w -n ${projectTarget}"
+                        echo "just update the image"
+                      }
+                    }
+                  }
+              }
+            } catch (err) {
+                echo "in catch block"
+                echo "Caught: ${err}"
+                currentBuild.result = 'FAILURE'
+                throw err
+            } // JenkinsPipeline
+      type: JenkinsPipeline
+    triggers:
+    - github:
+        secret: ${GITHUB_WEBHOOK_SECRET}
+      type: GitHub
+    - generic:
+        secret: ${GENERIC_WEBHOOK_SECRET}
+      type: Generic
