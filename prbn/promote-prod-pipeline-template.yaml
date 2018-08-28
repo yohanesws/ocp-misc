@@ -8,7 +8,7 @@ message: |-
   it using your OpenShift user credentials.
 metadata:
   annotations:
-    openshift.io/display-name: Promote same cluster Generic Pipeline 
+    openshift.io/display-name: Promote Different cluster Generic Pipeline 
     description: |-
       This template showcases the new Jenkins Pipeline integration for spring boot in OpenShift,
       which performs continuous integration and deployment right on the platform.
@@ -153,7 +153,7 @@ objects:
                       }catch(err){
                         secretDb = ""
                       }
-                      
+
                       if (secretDb!=""){
                          sh "oc export secret/${secretDb} -n ${projectSource} >  secret-staging.yml"
                       }
