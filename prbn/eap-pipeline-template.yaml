@@ -179,7 +179,7 @@ objects:
                         sh "oc rollout pause dc/${appName}-${version} -n ${projectTarget}"  
                         // sh "oc set volume dc/${appName}-${version} -n ${projectTarget} --add --name=config-volume -t configmap --configmap-name=${appName}-${version}-cm --mount-path=/deployments/config || true"
                         if (configMap !=  ""){
-                          sh "oc set env --from=secret/${appName}-${version}-db dc/${appName}-${version} -n ${projectTarget}"
+                          sh "oc set env --from=configmap/${configMap} dc/${appName}-${version} -n ${projectTarget}"
                         }
                         //apply timezone
                         sh "oc set env dc/${appName}-${version} TZ=Asia/Bangkok -n ${projectTarget}"

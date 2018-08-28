@@ -36,12 +36,31 @@ parameters:
   displayName: Destinatition Application Namespace/Project
   name: DEST_APP_NAMESPACE
   required: true
+- description: The token credential for login to destination cluster
+  displayName: Destination Token 
+  name: DEST_CLUSTER_TOKEN
+  required: true
+- description: Destination Repository Address.
+  displayName: Destination Repository
+  name: DEST_REPO
+  required: true
+  value: docker-registry-default.ocpprddjpb.kemenkeu.go.id
+- description: Destination Cluster URL Address.
+  displayName: Destination Cluster URL
+  name: DEST_CLUSTER_URL
+  required: true
+  value: kpbsdc-prdocpmaster.kemenkeu.go.id:8443
 - description: The configmap name that need to load as environment variable.
   displayName: Config Map EAP
   name: CONFIG_MAP_EAP
 - description: The secret name that need to load as environment variable.
   displayName: Secret  Database
   name: SECRET_DATABASE
+- description: The OpenShift Namespace where the jenkins running.
+  displayName: Namespace CICD
+  name: NAMESPACE_CICD
+  required: true
+  value: devops
 - description: Github trigger secret.  A difficult to guess string encoded as part of the webhook URL.  Not encrypted.
   displayName: GitHub Webhook Secret
   from: '[a-zA-Z0-9]{40}'
@@ -55,6 +74,16 @@ parameters:
   name: GENERIC_WEBHOOK_SECRET
   required: true
 objects:
+- apiVersion: v1
+  kind: Secret
+  labels:
+    credential.sync.jenkins.openshift.io: true
+  metadata:
+    name: ${PIPELINE_NAME}-dest-cluster-secret
+    namespace: ${NAMESPACE_CICD}
+  type: Opaque 
+  stringData: 
+    secrettext: ${DEST_CLUSTER_TOKEN}
 - apiVersion: v1
   kind: BuildConfig
   metadata:
@@ -73,6 +102,8 @@ objects:
                   def configMap="${CONFIG_MAP_EAP}"
                   def secretDb="${SECRET_DATABASE}"
                   def version=""
+                  def extRegistry="${DEST_REPO}"
+                  def ocpDest="${DEST_CLUSTER_URL}"
 
 
                   node () {
@@ -88,52 +119,87 @@ objects:
                       version=env.VERSION
                       echo "version selected ${version}"
                     }
-                    
+                  }
+
+                  node('image-mgmt'){
                     stage("Move Image") {
-                       sh "oc tag ${projectSource}/${appName}:${version} ${projectTarget}/${appName}:${version}"
+                       withCredentials([string(credentialsId: '${PIPELINE_NAME}-dest-cluster-secret', variable: 'DEST_TOKEN')]) {
+                        def localToken = readFile('/var/run/secrets/kubernetes.io/serviceaccount/token').trim()
+                        
+                        sh "oc get is/${appName} -n ${projectSource} -o template --template='{{.status.dockerImageRepository}}'| tr -d '\n' > internalRepo"
+                        def imageRegistry = readFile('internalRepo')
+
+                        echo "Promoting ${imageRegistry}:${version} -> ${extRegistry}/${projectTarget}/${appName}"
+                        sh """
+                        set +x
+                        skopeo copy --remove-signatures \
+                          --src-creds openshift:${localToken} --src-cert-dir=/run/secrets/kubernetes.io/serviceaccount/ \
+                          --dest-creds openshift:${DEST_TOKEN}  --dest-tls-verify=false \
+                          docker://${imageRegistry}:${version} docker://${extRegistry}/${projectTarget}/${appName}:${version}
+                        """
+                      }
                     }
+                  }
+                  node ('maven') {
                     stage ("Configuring") {
                       if (configMap!=""){
-                         sh "oc export cm/${configMap} -n ${projectSource} | oc create -n ${projectTarget} -f -|| true"
+                         sh "oc export cm/${configMap} -n ${projectSource} >  cm-staging.yml"
                       }
-                      if (secretDb!=""){
-                         sh "oc export secret/${secretDb} -n ${projectSource} | oc create -n ${projectTarget} -f -|| true"
+
+                      // checking if there db secret configure for this version
+                      try {
+                        sh "oc get secret ${appName}-${version}-db -o jsonpath='{.metadata.name}' -n ${projectSource} |  tr -d '\n'  > secret.name"
+                        secretDb= readFile('secret.name')
+                      }catch(err){
+                        secretDb = ""
                       }
                       
+                      if (secretDb!=""){
+                         sh "oc export secret/${secretDb} -n ${projectSource} >  secret-staging.yml"
+                      }
+                      withCredentials([string(credentialsId: '${PIPELINE_NAME}-dest-cluster-secret', variable: 'DEST_TOKEN')]) {
+                        sh "oc login ${ocpDest} --token=${DEST_TOKEN} --insecure-skip-tls-verify=true"
+                      }
+                      if (configMap!=""){
+                         sh "oc create -f cm-staging.yml -n ${projectTarget} || true"
+                      }
+                      if (secretDb!=""){
+                         sh "oc create -f  secret-staging.yml -n ${projectTarget} || true"
+                      }
                     }
                     stage("Deploying") {
                       def dcNotPresent = false
                       try {
-                        sh "oc get dc ${appName}-${version} -o jsonpath='{.metadata.name}' -n ${projectTarget}"
+                        sh "oc get dc ${appName} -o jsonpath='{.metadata.name}' -n ${projectTarget}"
                       }catch(err){
                         dcNotPresent = true
                       }
 
                       if (dcNotPresent){
-                        sh "oc tag ${projectTarget}/${appName}:${version} ${projectTarget}/${appName}:deploy-${version}"
-                        sh "oc new-app --docker-image=docker-registry.default.svc:5000/${projectTarget}/${appName}:deploy-${version} --name=${appName}-${version} -n ${projectTarget} || true"
-                        sh "oc rollout cancel dc/${appName}-${version} -n ${projectTarget} || true"deploy
-                        sh "oc rollout pause dc/${appName}-${version} -n ${projectTarget}"  
-                        // sh "oc set volume dc/${appName}-${version} -n ${projectTarget} --add --name=config-volume -t configmap --configmap-name=${appName}-${version}-cm --mount-path=/deployments/config || true"
+                        sh "oc tag ${projectTarget}/${appName}:${version} ${projectTarget}/${appName}:latest"
+                        sh "oc new-app ${appName}:latest --name=${appName} -n ${projectTarget} || true"
+                        sh "oc rollout cancel dc/${appName} -n ${projectTarget} || true"
+                        sh "oc rollout pause dc/${appName} -n ${projectTarget}"  
+                        // sh "oc set volume dc/${appName} -n ${projectTarget} --add --name=config-volume -t configmap --configmap-name=${appName}-cm --mount-path=/deployments/config || true"
                         if (configMap !=  ""){
-                          sh "oc set env --from=secret/${appName}-${version}-db dc/${appName}-${version} -n ${projectTarget}"
+                          sh "oc set env --from=configmap/${configMap} dc/${appName} -n ${projectTarget}"
                         }
                         if (secretDb !=  ""){
-                          sh "oc set env --from=secret/${appName}-${version}-db --prefix=EXTERNAL_DATABASE_ dc/${appName}-${version} -n ${projectTarget}"
+                          sh "oc set env --from=secret/${secretDb} --prefix=EXTERNAL_DATABASE_ dc/${appName} -n ${projectTarget}"
                         }
                         //apply timezone
-                        sh "oc set env dc/${appName}-${version} TZ=Asia/Bangkok -n ${projectTarget}"
+                        sh "oc set env dc/${appName} TZ=Asia/Bangkok -n ${projectTarget}"
 
-                        sh "oc rollout resume dc/${appName}-${version} -n ${projectTarget}"  
-                        sh "oc rollout status dc/${appName}-${version} -w -n ${projectTarget}"
+                        sh "oc rollout resume dc/${appName} -n ${projectTarget}"  
+                        sh "oc rollout status dc/${appName} -w -n ${projectTarget}"
 
-                        sh "oc create route edge ${appName}-${version}  --service='${appName}-${version}' -n ${projectTarget}"
+                        sh "oc expose svc ${appName} -n ${projectTarget}"
                         
                       }else{
-                        sh "oc rollout pause dc/${appName}-${version} -n ${projectTarget}"  
-                        sh "oc tag ${projectTarget}/${appName}:${version} ${projectTarget}/${appName}:deploy-${version}"
-                        sh "oc rollout resume dc/${appName}-${version} -n ${projectTarget}"  
-                        sh "oc rollout status dc/${appName}-${version} -w -n ${projectTarget}"
+                        sh "oc rollout pause dc/${appName} -n ${projectTarget}"  
+                        sh "oc tag ${projectTarget}/${appName}:${version} ${projectTarget}/${appName}:latest"
+                        sh "oc rollout resume dc/${appName} -n ${projectTarget}"  
+                        sh "oc rollout status dc/${appName} -w -n ${projectTarget}"
                         echo "just update the image"
                       }
                     }

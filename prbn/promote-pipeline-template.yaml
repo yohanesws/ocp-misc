@@ -39,9 +39,11 @@ parameters:
 - description: The configmap name that need to load as environment variable.
   displayName: Config Map EAP
   name: CONFIG_MAP_EAP
-- description: The secret name that need to load as environment variable.
-  displayName: Secret  Database
-  name: SECRET_DATABASE
+- description: The OpenShift Namespace where the jenkins running.
+  displayName: Namespace CICD
+  name: NAMESPACE_CICD
+  required: true
+  value: devops
 - description: Github trigger secret.  A difficult to guess string encoded as part of the webhook URL.  Not encrypted.
   displayName: GitHub Webhook Secret
   from: '[a-zA-Z0-9]{40}'
@@ -96,6 +98,14 @@ objects:
                       if (configMap!=""){
                          sh "oc export cm/${configMap} -n ${projectSource} | oc create -n ${projectTarget} -f -|| true"
                       }
+                      // checking if there db secret configure for this version
+                      try {
+                        sh "oc get secret ${appName}-${version}-db -o jsonpath='{.metadata.name}' -n ${projectSource} |  tr -d '\n'  > secret.name"
+                        secretDb= readFile('secret.name')
+                      }catch(err){
+                        secretDb = ""
+                      }
+
                       if (secretDb!=""){
                          sh "oc export secret/${secretDb} -n ${projectSource} | oc create -n ${projectTarget} -f -|| true"
                       }
@@ -116,10 +126,10 @@ objects:
                         sh "oc rollout pause dc/${appName}-${version} -n ${projectTarget}"  
                         // sh "oc set volume dc/${appName}-${version} -n ${projectTarget} --add --name=config-volume -t configmap --configmap-name=${appName}-${version}-cm --mount-path=/deployments/config || true"
                         if (configMap !=  ""){
-                          sh "oc set env --from=secret/${appName}-${version}-db dc/${appName}-${version} -n ${projectTarget}"
+                          sh "oc set env --from=configmap/${configMap} dc/${appName}-${version} -n ${projectTarget}"
                         }
                         if (secretDb !=  ""){
-                          sh "oc set env --from=secret/${appName}-${version}-db --prefix=EXTERNAL_DATABASE_ dc/${appName}-${version} -n ${projectTarget}"
+                          sh "oc set env --from=secret/${secretDb} --prefix=EXTERNAL_DATABASE_ dc/${appName}-${version} -n ${projectTarget}"
                         }
                         //apply timezone
                         sh "oc set env dc/${appName}-${version} TZ=Asia/Bangkok -n ${projectTarget}"
@@ -127,7 +137,7 @@ objects:
                         sh "oc rollout resume dc/${appName}-${version} -n ${projectTarget}"  
                         sh "oc rollout status dc/${appName}-${version} -w -n ${projectTarget}"
 
-                        sh "oc create route edge ${appName}-${version}  --service='${appName}-${version}' -n ${projectTarget}"
+                        sh "oc expose svc ${appName}-${version} -n ${projectTarget}"
                         
                       }else{
                         sh "oc rollout pause dc/${appName}-${version} -n ${projectTarget}"  
