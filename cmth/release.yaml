@@ -2,9 +2,17 @@
 release: "release-name"
 apps: 
   - app: "api-gateway"
-    cm: ""
     dst-ns: "apigw"
     sha: "asdasd12312"
     src-ns: "apigw-uat"
     tag: "1.0.0"
+    public: true
+    partner: false
+    internal: true
+    cm: "" #optional
+    cm-mnt: "" #optional
+    cm-mnt-file: "" #optional
+    spring-uri: "" #optional
+    secretDb: "" #optional
+    disableMigrate: "" #optional
 sql: "run.sql"
