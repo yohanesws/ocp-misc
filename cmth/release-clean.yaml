@@ -1,0 +1,9 @@
+--- 
+release: "release-name"
+apps: 
+  - app: "api-gateway"
+    dst-ns: "apigw"
+    sha: "asdasd12312"
+    src-ns: "apigw-uat"
+    tag: "1.0.0"
+sql: "run.sql"
