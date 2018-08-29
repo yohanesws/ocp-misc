@@ -240,9 +240,15 @@ objects:
                         def appName="${app.app}"
                         def version="${app.tag}"
                         def projectTarget="${app.dst-ns}"
-                        def public=${app.public}
-                        def partner=${app.partner}
-                        def internal=${app.internal}
+                        
+                        def needRouterPublic=false
+                        if (app.public) needRouterPublic=${app.public}
+                        
+                        def needRouterPartner=false
+                        if (app.partner) needRouterPartner=${app.partner}
+                        
+                        def needRouterInternal=false
+                        if (app.internal) needRouterInternal=${app.internal}
                         
                         def configMap=""
                         if (app.cm) configMap="${app.cm}"
@@ -301,7 +307,17 @@ objects:
                           sh "oc rollout resume dc/${appName} -n ${projectTarget}"  
                           sh "oc rollout status dc/${appName} -w -n ${projectTarget}"
 
-                          sh "oc expose svc ${appName} -n ${projectTarget}"
+                          if (needRouterInternal) {
+                            sh "oc create route edge ${appName}-internal  --service='${appName}' --hostname='${appName}-${projectTarget}${suffixRouterInternal}' -n ${projectTarget}"
+                          }
+                          if (needRouterPartner) {
+                            sh "oc create route edge ${appName}-partner --service='${appName}' --hostname='${appName}-${projectTarget}${suffixRouterPartner}' -n ${projectTarget}"
+                            sh "oc label route ${appName}-partner exposure=partner -n ${projectTarget}"
+                          }
+                          if (needRouterPublic) {
+                            sh "oc create route edge ${appName}-public  --service='${appName}' --hostname='${appName}-${projectTarget}${suffixRouterPublic}' -n ${projectTarget}"
+                            sh "oc label route ${appName}-public exposure=public -n ${projectTarget}"
+                          }
                           
                         }else{
                           sh "oc rollout pause dc/${appName} -n ${projectTarget}"  
