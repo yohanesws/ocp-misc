@@ -1,8 +1,7 @@
 FROM registry.access.redhat.com/openshift3/jenkins-slave-base-rhel7:v3.10
 
-MAINTAINER Yohanes <ysono@redhat.com>
-
-LABEL com.redhat.component="jenkins-slave-mysql-client" \
+LABEL maintainer="Yohanes <ysono@redhat.com>"\
+      com.redhat.component="jenkins-slave-mysql-client" \
       name="jenkins-slave-mysql-client" \
       architecture="x86_64" \
       io.k8s.display-name="Jenkins Slave Image Management" \
