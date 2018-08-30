@@ -104,9 +104,10 @@ objects:
   metadata:
     name: ${PIPELINE_NAME}-source-cluster-secret
     namespace: ${NAMESPACE_CICD}
-  type: Opaque 
+  type: kubernetes.io/basic-auth 
   stringData: 
-    secrettext: ${SOURCE_CLUSTER_TOKEN}
+    password: ${SOURCE_CLUSTER_TOKEN}
+    username: unused
 - apiVersion: v1
   kind: Secret
   labels:
@@ -114,9 +115,10 @@ objects:
   metadata:
     name: ${PIPELINE_NAME}-dest-repo-secret
     namespace: ${NAMESPACE_CICD}
-  type: Opaque 
+  type: kubernetes.io/basic-auth 
   stringData: 
-    secrettext: ${DESTINATION_REPO_TOKEN}
+    password: ${DESTINATION_REPO_TOKEN}
+    username: unused
 - apiVersion: v1
   kind: Secret
   labels:
@@ -124,9 +126,10 @@ objects:
   metadata:
     name: ${PIPELINE_NAME}-source-repo-secret
     namespace: ${NAMESPACE_CICD}
-  type: Opaque 
+  type: kubernetes.io/basic-auth 
   stringData: 
-    secrettext: ${SOURCE_REPO_TOKEN}
+    password: ${SOURCE_REPO_TOKEN}
+    username: unused
 - apiVersion: v1
   kind: BuildConfig
   metadata:
@@ -139,6 +142,7 @@ objects:
         jenkinsfile: |-
             try {
                 timeout(time: 20, unit: 'MINUTES') {
+                  def projectCicd="${NAMESPACE_CICD}"
                   def gitRepo="${RELEASE_REPOSITORY_URL}"
                   def branch="${RELEASE_REPOSITORY_BRANCH}"
                   def secretName="${RELEASE_REPOSITORY_CREDENTIAL_SECRET}"
@@ -151,6 +155,10 @@ objects:
 
                   node () {
                     stage("Preparing"){
+                      sh "oc label secret ${PIPELINE_NAME}-source-repo-secret -n ${projectCicd} credential.sync.jenkins.openshift.io=true"
+                      sh "oc label secret ${PIPELINE_NAME}-dest-repo-secret -n ${projectCicd} credential.sync.jenkins.openshift.io=true"
+                      sh "oc label secret ${PIPELINE_NAME}-source-cluster-secret -n ${projectCicd} credential.sync.jenkins.openshift.io=true"
+
                       git branch: branch, url: gitRepo , credentialsId: "${projectCicd}-${secretName}"
                       timeout(time:2, unit:'HOURS') {
                           env.VERSION = input message: 'Start Prod Promote?', ok: 'Promote!',
@@ -169,10 +177,10 @@ objects:
                     stage("Move Image") {
                       def tokenSource=""
                       def tokenDest=""
-                      withCredentials([string(credentialsId: '${PIPELINE_NAME}-dest-repo-secret, variable: 'CRED_DEST_TOKEN')]) {
+                      withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: '${PIPELINE_NAME}-dest-repo-secret',  passwordVariable:"CRED_DEST_TOKEN"]]){
                         tokenDest="${CRED_DEST_TOKEN}"
                       }
-                      withCredentials([string(credentialsId: '${PIPELINE_NAME}-dest-repo-secret, variable: 'CRED_SOURCE_TOKEN')]) {
+                      withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: '${PIPELINE_NAME}-source-repo-secret',  passwordVariable:"CRED_SOURCE_TOKEN"]]){
                         tokenSource="${CRED_SOURCE_TOKEN}"
                       }
                       
@@ -181,25 +189,25 @@ objects:
                       for(app in release.apps){
                         def appName="${app.app}"
                         def tag="${app.tag}"
-                        def src-ns="${app.src-ns}"
-                        def dst-ns="${app.dst-ns}"
+                        def srcNs="${app.src-ns}"
+                        def dstNs="${app.dst-ns}"
 
-                        echo "Promoting ${sourceRepo}/${src-ns}/${appName}:${tag} -> ${destRepo}/${dst-ns}/${appName}:${tag}"
+                        echo "Promoting ${sourceRepo}/${srcNs}/${appName}:${tag} -> ${destRepo}/${dstNs}/${appName}:${tag}"
                         sh """
                         set +x
                         skopeo copy --remove-signatures \
                           --src-creds openshift:${tokenSource} --src-tls-verify=false \
                           --dest-creds openshift:${tokenDest}  --dest-tls-verify=false \
-                          docker://${sourceRepo}/${src-ns}/${appName}:${tag}  docker://${destRepo}/${dst-ns}/${appName}:${tag}
+                          docker://${sourceRepo}/${srcNs}/${appName}:${tag}  docker://${destRepo}/${dstNs}/${appName}:${tag}
                         """
 
-                        echo "promoting ${destRepo}/${dst-ns}/${appName}:${tag} -> docker-registry.default.svc:5000/${dst-ns}/${appName}:${tag}"
+                        echo "promoting ${destRepo}/${dstNs}/${appName}:${tag} -> docker-registry.default.svc:5000/${dstNs}/${appName}:${tag}"
                         sh """
                         set +x
                         skopeo copy --remove-signatures \
                           --dest-creds openshift:${localToken} --dest-cert-dir=/run/secrets/kubernetes.io/serviceaccount/ \
                           --src-creds openshift:${tokenDest}  --src-tls-verify=false \
-                          docker://${destRepo}/${dst-ns}/${appName}:${tag}  docker-registry.default.svc:5000/${dst-ns}/${appName}:${tag}
+                          docker://${destRepo}/${dstNs}/${appName}:${tag}  docker-registry.default.svc:5000/${dstNs}/${appName}:${tag}
                         """
                       }
                       
@@ -207,22 +215,22 @@ objects:
                     stage ("configuring"){
                       def localToken = readFile('/var/run/secrets/kubernetes.io/serviceaccount/token').trim()
                       def sourceClusterToken =""
-                      withCredentials([string(credentialsId: '${PIPELINE_NAME}-dest-repo-secret, variable: 'SOURCE_CLUSTER_TOKEN')]) {
+                      withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: '${PIPELINE_NAME}-source-cluster-secret',  passwordVariable:"SOURCE_CLUSTER_TOKEN"]]){
                         sourceClusterToken="${SOURCE_CLUSTER_TOKEN}"
                       }
                       for(app in release.apps){
-                        def src-ns="${app.src-ns}"
-                        def dst-ns="${app.dst-ns}"
+                        def srcNs="${app.src-ns}"
+                        def dstNs="${app.dst-ns}"
                         
                         def cm =""
                         if (app.cm) cm="${app.cm}"
 
                         if (cm != ""){
                           sh "oc login ${clusterSource} --token=${sourceClusterToken} --insecure-skip-tls-verify=true"
-                          sh "oc export cm/${cm} -n ${src-ns} >  cm-staging.yml"
+                          sh "oc export cm/${cm} -n ${srcNs} >  cm-staging.yml"
 
                           sh "oc login kubernetes.default.svc:443 --token=${localToken} --insecure-skip-tls-verify=true"
-                          sh "oc create -f cm-staging.yml -n ${dst-ns} || true"
+                          sh "oc create -f cm-staging.yml -n ${dstNs} || true"
                         }
                       }
                     }
@@ -253,11 +261,11 @@ objects:
                         def configMap=""
                         if (app.cm) configMap="${app.cm}"
                         
-                        def cm-mnt=""
-                        if (app.cm-mnt) cm-mnt="${app.cm-mnt}"
+                        def cmMnt=""
+                        if (app.cm-mnt) cmMnt="${app.cm-mnt}"
                         
-                        def cm-mnt-file=""
-                        if (app.cm-mnt-file) cm-mnt-file="${app.cm-mnt-file}"
+                        def cmMntFile=""
+                        if (app.cm-mnt-file) cmMntFile="${app.cm-mnt-file}"
 
                         def secretDb=""
                         if(app.secretDb) secretDb="${app.secretDb}"
@@ -281,11 +289,11 @@ objects:
                           sh "oc rollout cancel dc/${appName} -n ${projectTarget} || true"
                           sh "oc rollout pause dc/${appName} -n ${projectTarget}"  
                           
-                          if (configMap !=  "" && cm-mnt !=""){
-                            if(cm-mnt-file!=""){
-                              sh "oc set volume dc/${appName} -n ${projectTarget} --add --name=config-volume -t configmap --configmap-name=${configMap} --mount-path=${cm-mnt} --sub-path=${cm-mnt-file}"
+                          if (configMap !=  "" && cmMnt !=""){
+                            if(cmMntFile!=""){
+                              sh "oc set volume dc/${appName} -n ${projectTarget} --add --name=config-volume -t configmap --configmap-name=${configMap} --mount-path=${cmMnt} --sub-path=${cmMntFile}"
                             }else{
-                              sh "oc set volume dc/${appName} -n ${projectTarget} --add --name=config-volume -t configmap --configmap-name=${configMap} --mount-path=${cm-mnt}"
+                              sh "oc set volume dc/${appName} -n ${projectTarget} --add --name=config-volume -t configmap --configmap-name=${configMap} --mount-path=${cmMnt}"
                             }
                           }
 
