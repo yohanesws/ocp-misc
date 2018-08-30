@@ -1,18 +1,18 @@
 FROM registry.access.redhat.com/openshift3/jenkins-slave-base-rhel7:v3.10
 
-MAINTAINER Andrew Block <ablock@redhat.com>
+MAINTAINER Yohanes <ysono@redhat.com>
 
-LABEL com.redhat.component="jenkins-slave-image-mgmt" \
-      name="jenkins-slave-image-mgmt" \
+LABEL com.redhat.component="jenkins-slave-mysql-client" \
+      name="jenkins-slave-mysql-client" \
       architecture="x86_64" \
       io.k8s.display-name="Jenkins Slave Image Management" \
-      io.k8s.description="Image management tools on top of the jenkins slave base image" \
-      io.openshift.tags="openshift,jenkins,slave,copy"
+      io.k8s.description="MYSQL Client on top of the jenkins slave base image" \
+      io.openshift.tags="openshift,jenkins,slave,mysql"
 USER root
 
 RUN yum repolist > /dev/null && \
     yum clean all && \
-    INSTALL_PKGS="skopeo" && \
+    INSTALL_PKGS="mysql" && \
     yum install -y --enablerepo=rhel-7-server-extras-rpms --setopt=tsflags=nodocs $INSTALL_PKGS && \
     rpm -V $INSTALL_PKGS && \
     yum clean all

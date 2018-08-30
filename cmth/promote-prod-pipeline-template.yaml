@@ -28,7 +28,7 @@ parameters:
   displayName: Namespace CICD
   name: NAMESPACE_CICD
   required: true
-  value: cicd
+  value: cicd-prod
 - description: The URL of the repository with your application source code.
   displayName: Git Repository URL
   name: RELEASE_REPOSITORY_URL
@@ -177,10 +177,10 @@ objects:
                     stage("Move Image") {
                       def tokenSource=""
                       def tokenDest=""
-                      withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: '${PIPELINE_NAME}-dest-repo-secret',  passwordVariable:"CRED_DEST_TOKEN"]]){
+                      withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: '${NAMESPACE_CICD}-${PIPELINE_NAME}-dest-repo-secret',  passwordVariable:"CRED_DEST_TOKEN"]]){
                         tokenDest="${CRED_DEST_TOKEN}"
                       }
-                      withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: '${PIPELINE_NAME}-source-repo-secret',  passwordVariable:"CRED_SOURCE_TOKEN"]]){
+                      withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: '${NAMESPACE_CICD}-${PIPELINE_NAME}-source-repo-secret',  passwordVariable:"CRED_SOURCE_TOKEN"]]){
                         tokenSource="${CRED_SOURCE_TOKEN}"
                       }
                       
@@ -215,7 +215,7 @@ objects:
                     stage ("configuring"){
                       def localToken = readFile('/var/run/secrets/kubernetes.io/serviceaccount/token').trim()
                       def sourceClusterToken =""
-                      withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: '${PIPELINE_NAME}-source-cluster-secret',  passwordVariable:"SOURCE_CLUSTER_TOKEN"]]){
+                      withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: '${NAMESPACE_CICD}-${PIPELINE_NAME}-source-cluster-secret',  passwordVariable:"SOURCE_CLUSTER_TOKEN"]]){
                         sourceClusterToken="${SOURCE_CLUSTER_TOKEN}"
                       }
                       for(app in release.apps){
