@@ -149,6 +149,9 @@ objects:
                   def sourceRepo="${SOURCE_REPO}"
                   def destRepo="${DESTINATION_REPO}"
                   def clusterSource="${SOURCE_CLUSTER_URL}"
+                  def suffixRouterInternal="${SUFFIX_ROUTER_INTERNAL}"
+                  def suffixRouterPartner="${SUFFIX_ROUTER_PARTNER}"
+                  def suffixRouterPublic="${SUFFIX_ROUTER_PUBLIC}"
                   def releaseName=""
                   def release
 
@@ -189,8 +192,8 @@ objects:
                       for(app in release.apps){
                         def appName="${app.app}"
                         def tag="${app.tag}"
-                        def srcNs="${app.src-ns}"
-                        def dstNs="${app.dst-ns}"
+                        def srcNs="${app.srcNs}"
+                        def dstNs="${app.dstNs}"
 
                         echo "Promoting ${sourceRepo}/${srcNs}/${appName}:${tag} -> ${destRepo}/${dstNs}/${appName}:${tag}"
                         sh """
@@ -207,7 +210,7 @@ objects:
                         skopeo copy --remove-signatures \
                           --dest-creds openshift:${localToken} --dest-cert-dir=/run/secrets/kubernetes.io/serviceaccount/ \
                           --src-creds openshift:${tokenDest}  --src-tls-verify=false \
-                          docker://${destRepo}/${dstNs}/${appName}:${tag}  docker-registry.default.svc:5000/${dstNs}/${appName}:${tag}
+                          docker://${destRepo}/${dstNs}/${appName}:${tag}  docker://docker-registry.default.svc:5000/${dstNs}/${appName}:${tag}
                         """
                       }
                       
@@ -215,12 +218,12 @@ objects:
                     stage ("configuring"){
                       def localToken = readFile('/var/run/secrets/kubernetes.io/serviceaccount/token').trim()
                       def sourceClusterToken =""
-                      withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: '${NAMESPACE_CICD}-${PIPELINE_NAME}-source-cluster-secret',  passwordVariable:"SOURCE_CLUSTER_TOKEN"]]){
-                        sourceClusterToken="${SOURCE_CLUSTER_TOKEN}"
+                      withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: '${NAMESPACE_CICD}-${PIPELINE_NAME}-source-cluster-secret',  passwordVariable:"SRC_CLUSTER_TOKEN"]]){
+                        sourceClusterToken="${SRC_CLUSTER_TOKEN}"
                       }
                       for(app in release.apps){
-                        def srcNs="${app.src-ns}"
-                        def dstNs="${app.dst-ns}"
+                        def srcNs="${app.srcNs}"
+                        def dstNs="${app.dstNs}"
                         
                         def cm =""
                         if (app.cm) cm="${app.cm}"
@@ -247,7 +250,7 @@ objects:
                         
                         def appName="${app.app}"
                         def version="${app.tag}"
-                        def projectTarget="${app.dst-ns}"
+                        def projectTarget="${app.dstNs}"
                         
                         def needRouterPublic=false
                         if (app.public) needRouterPublic=${app.public}
@@ -262,16 +265,16 @@ objects:
                         if (app.cm) configMap="${app.cm}"
                         
                         def cmMnt=""
-                        if (app.cm-mnt) cmMnt="${app.cm-mnt}"
+                        if (app.cmMnt) cmMnt="${app.cmMnt}"
                         
                         def cmMntFile=""
-                        if (app.cm-mnt-file) cmMntFile="${app.cm-mnt-file}"
+                        if (app.cmMntFile) cmMntFile="${app.cmMntFile}"
 
                         def secretDb=""
                         if(app.secretDb) secretDb="${app.secretDb}"
 
                         def springUri=""
-                        if(app.spring-uri) springUri="${app.spring-uri}"
+                        if(app.springUri) springUri="${app.springUri}"
 
                         def disableMigrate=""
                         if(app.disableMigrate) disableMigrate="${app.disableMigrate}"
