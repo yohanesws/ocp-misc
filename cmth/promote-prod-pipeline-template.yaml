@@ -253,13 +253,13 @@ objects:
                         def projectTarget="${app.dstNs}"
                         
                         def needRouterPublic=false
-                        if (app.public) needRouterPublic=${app.public}
+                        if (app.public) needRouterPublic=app.public
                         
                         def needRouterPartner=false
-                        if (app.partner) needRouterPartner=${app.partner}
+                        if (app.partner) needRouterPartner=app.partner
                         
                         def needRouterInternal=false
-                        if (app.internal) needRouterInternal=${app.internal}
+                        if (app.internal) needRouterInternal=app.internal
                         
                         def configMap=""
                         if (app.cm) configMap="${app.cm}"
