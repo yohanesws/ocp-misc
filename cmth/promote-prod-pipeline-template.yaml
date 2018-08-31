@@ -174,12 +174,10 @@ objects:
 
                   node () {
                     stage("Preparing"){
-                      sh "oc label secret ${PIPELINE_NAME}-source-repo-secret -n ${projectCicd} credential.sync.jenkins.openshift.io=true"
-                      sh "oc label secret ${PIPELINE_NAME}-dest-repo-secret -n ${projectCicd} credential.sync.jenkins.openshift.io=true"
-                      sh "oc label secret ${PIPELINE_NAME}-source-cluster-secret -n ${projectCicd} credential.sync.jenkins.openshift.io=true"
+                      sh "oc label secret ${PIPELINE_NAME}-source-repo-secret -n ${projectCicd} credential.sync.jenkins.openshift.io=true || true"
+                      sh "oc label secret ${PIPELINE_NAME}-dest-repo-secret -n ${projectCicd} credential.sync.jenkins.openshift.io=true || true"
+                      sh "oc label secret ${PIPELINE_NAME}-source-cluster-secret -n ${projectCicd} credential.sync.jenkins.openshift.io=true || true"
                       
-                      sh "mkdir source || true"
-                      sh "cd source"
                       git branch: gitSourceBranch, url: gitSourceRepo , credentialsId: "${projectCicd}-${secretGitSource}"
                       timeout(time:2, unit:'HOURS') {
                           env.VERSION = input message: 'Start Prod Promote?', ok: 'Promote!',
@@ -188,24 +186,19 @@ objects:
                       releaseName = env.VERSION
                       release = readYaml file: "${releaseName}"
                       echo "release:${release}"
-                      sh "cd .."
                     }
                     stage("Moving Release"){
-                      sh "mkdir target || true"
-                      sh "cd target"
                       withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: '${NAMESPACE_CICD}-${RELEASE_PROD_REPOSITORY_CREDENTIAL_SECRET}', usernameVariable: 'UNUSED',  passwordVariable:"GIT_TARGET_ACCESS_TOKEN"]]){
-                        sh "echo '${gitTargetRepo}'| tr 'https://' 'https://oauth2:${GIT_TARGET_ACCESS_TOKEN}' > gitTarget.repo"
-                        gitTargetRepo=readFile(gitTarget.repo).trim()
-                        sh "echo '${gitTargetRepo}'| tr 'http://' 'http://oauth2:${GIT_TARGET_ACCESS_TOKEN}' > gitTarget.repo"
+                        sh "echo '${gitTargetRepo}' > gitTarget.repo"
+                        sh "sed -i 's|https://|https://oauth2:${GIT_TARGET_ACCESS_TOKEN}@|g'  gitTarget.repo"
+                        sh "sed -i 's|http://|http://oauth2:${GIT_TARGET_ACCESS_TOKEN}@|g'  gitTarget.repo"
                         gitTargetRepo=readFile(gitTarget.repo).trim()
                         
                         git branch: gitTargetBranch, url: gitTargetRepo , credentialsId: "${projectCicd}-${secretGitSource}"
-                        sh "cp ../source/${releaseName} ."
                         sh "git add ${releaseName} || true"
                         sh "git commit -a -m 'add/update ${releaseName}'"
                         sh "git push"
                       }
-                      sh "cd .."
                     }
                   }
 
