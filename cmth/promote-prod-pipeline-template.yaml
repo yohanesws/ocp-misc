@@ -186,18 +186,24 @@ objects:
                       releaseName = env.VERSION
                       release = readYaml file: "${releaseName}"
                       echo "release:${release}"
+                      sh "rm -rf target && mkdir target"
+                      sh "cp ${releaseName} target"
                     }
                     stage("Moving Release"){
                       withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: '${NAMESPACE_CICD}-${RELEASE_PROD_REPOSITORY_CREDENTIAL_SECRET}', usernameVariable: 'UNUSED',  passwordVariable:"GIT_TARGET_ACCESS_TOKEN"]]){
                         sh "echo '${gitTargetRepo}' > gitTarget.repo"
                         sh "sed -i 's|https://|https://oauth2:${GIT_TARGET_ACCESS_TOKEN}@|g'  gitTarget.repo"
                         sh "sed -i 's|http://|http://oauth2:${GIT_TARGET_ACCESS_TOKEN}@|g'  gitTarget.repo"
-                        gitTargetRepo=readFile(gitTarget.repo).trim()
+                        gitTargetRepo=readFile('gitTarget.repo').trim()
+                        sh "rm -f gitTarget.repo"
                         
                         git branch: gitTargetBranch, url: gitTargetRepo , credentialsId: "${projectCicd}-${secretGitSource}"
+                        sh "git config user.email 'jenkins-ocp@cimb-thai.com'"
+                        sh "git config user.name 'jenkins-ocp'"
+                        sh "cp -f target/${releaseName} ${releaseName}"
                         sh "git add ${releaseName} || true"
-                        sh "git commit -a -m 'add/update ${releaseName}'"
-                        sh "git push"
+                        sh "git commit -a -m 'add/update ${releaseName}' || true"
+                        sh "git push origin master"
                       }
                     }
                   }
@@ -343,18 +349,6 @@ objects:
 
                           sh "oc rollout resume dc/${appName} -n ${projectTarget}"  
                           sh "oc rollout status dc/${appName} -w -n ${projectTarget}"
-
-                          if (needRouterInternal) {
-                            sh "oc create route edge ${appName}-internal  --service='${appName}' --hostname='${appName}-${projectTarget}${suffixRouterInternal}' -n ${projectTarget}"
-                          }
-                          if (needRouterPartner) {
-                            sh "oc create route edge ${appName}-partner --service='${appName}' --hostname='${appName}-${projectTarget}${suffixRouterPartner}' -n ${projectTarget}"
-                            sh "oc label route ${appName}-partner exposure=partner -n ${projectTarget}"
-                          }
-                          if (needRouterPublic) {
-                            sh "oc create route edge ${appName}-public  --service='${appName}' --hostname='${appName}-${projectTarget}${suffixRouterPublic}' -n ${projectTarget}"
-                            sh "oc label route ${appName}-public exposure=public -n ${projectTarget}"
-                          }
                           
                         }else{
                           sh "oc rollout pause dc/${appName} -n ${projectTarget}"  
@@ -362,6 +356,23 @@ objects:
                           sh "oc rollout resume dc/${appName} -n ${projectTarget}"  
                           sh "oc rollout status dc/${appName} -w -n ${projectTarget}"
                           echo "just update the image"
+                        }
+                        if (needRouterInternal) {
+                          sh "oc create route edge ${appName}-internal  --service='${appName}' --hostname='${appName}-${projectTarget}${suffixRouterInternal}' -n ${projectTarget} || true"
+                        }else{
+                          sh "oc delete route ${appName}-internal -n ${projectTarget}"
+                        }
+                        if (needRouterPartner) {
+                          sh "oc create route edge ${appName}-partner --service='${appName}' --hostname='${appName}-${projectTarget}${suffixRouterPartner}' -n ${projectTarget} || true"
+                          sh "oc label route ${appName}-partner exposure=partner -n ${projectTarget} || true"
+                        }else{
+                          sh "oc delete route ${appName}-partner -n ${projectTarget}"
+                        }
+                        if (needRouterPublic) {
+                          sh "oc create route edge ${appName}-public  --service='${appName}' --hostname='${appName}-${projectTarget}${suffixRouterPublic}' -n ${projectTarget} || true"
+                          sh "oc label route ${appName}-public exposure=public -n ${projectTarget} || true"
+                        }else{
+                          sh "oc delete route ${appName}-public -n ${projectTarget}"
                         }
                       }
                     }
