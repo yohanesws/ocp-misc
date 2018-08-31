@@ -1,0 +1,27 @@
+---
+release: "release-complete"
+apps:
+  - app: "apigw"
+    dstNs: "apigw"
+    sha: "asdasd12312"
+    srcNs: "apigw-uat"
+    tag: "1"
+    public: true #optional
+    partner: false #optional
+    internal: true #optional
+    cm: "apigw-1-cm" #optional
+    cmMnt: "/deployments/config" #optional
+    cmMntFile: "" #optional
+    springUri: "http://centralize-configuration.application.svc.cluster.local:8080/centralize-configuration" #optional
+    secretDb: "" #optional
+    disableMigrate: "" #optional
+  - app: "centralize-configuration"
+    dstNs: "application"
+    sha: "asdasd12312"
+    srcNs: "application-uat"
+    tag: "0"
+    cm: "centralize-configuration-0-cm" #optional
+    cmMnt: "/deployments/config" #optional=
+    springUri: "" #optional
+    secretDb: "centralize-configuration" #optional
+sql: "run.sql"
