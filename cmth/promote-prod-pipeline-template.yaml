@@ -360,19 +360,19 @@ objects:
                         if (needRouterInternal) {
                           sh "oc create route edge ${appName}-internal  --service='${appName}' --hostname='${appName}-${projectTarget}${suffixRouterInternal}' -n ${projectTarget} || true"
                         }else{
-                          sh "oc delete route ${appName}-internal -n ${projectTarget}"
+                          sh "oc delete route ${appName}-internal -n ${projectTarget} || true"
                         }
                         if (needRouterPartner) {
                           sh "oc create route edge ${appName}-partner --service='${appName}' --hostname='${appName}-${projectTarget}${suffixRouterPartner}' -n ${projectTarget} || true"
                           sh "oc label route ${appName}-partner exposure=partner -n ${projectTarget} || true"
                         }else{
-                          sh "oc delete route ${appName}-partner -n ${projectTarget}"
+                          sh "oc delete route ${appName}-partner -n ${projectTarget} || true"
                         }
                         if (needRouterPublic) {
                           sh "oc create route edge ${appName}-public  --service='${appName}' --hostname='${appName}-${projectTarget}${suffixRouterPublic}' -n ${projectTarget} || true"
                           sh "oc label route ${appName}-public exposure=public -n ${projectTarget} || true"
                         }else{
-                          sh "oc delete route ${appName}-public -n ${projectTarget}"
+                          sh "oc delete route ${appName}-public -n ${projectTarget} || true"
                         }
                       }
                     }
