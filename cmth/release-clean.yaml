@@ -5,5 +5,5 @@ apps:
     dstNs: "apigw"
     sha: "asdasd12312"
     srcNs: "apigw-uat"
-    tag: "1.0.0"
+    tag: "1"
 sql: "run.sql"
