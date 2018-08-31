@@ -18,7 +18,7 @@ metadata:
       console allowing you to see your entire application lifecycle in a single view.
     iconClass: icon-jenkins
     tags: instant-app,promote,jenkins
-  name: promote-pipeline-prod-template
+  name: promote-pipeline-prod-with-db-template
 parameters:
 - description: The name assigned to pipeline defined in this template.
   displayName: Pipeline Name
