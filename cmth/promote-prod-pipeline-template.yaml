@@ -357,6 +357,7 @@ objects:
                           sh "oc rollout status dc/${appName} -w -n ${projectTarget}"
                           echo "just update the image"
                         }
+                        
                         if (needRouterInternal) {
                           sh "oc create route edge ${appName}-internal  --service='${appName}' --hostname='${appName}-${projectTarget}${suffixRouterInternal}' -n ${projectTarget} || true"
                         }else{
