@@ -1,18 +1,18 @@
 --- 
 release: "release-name"
 apps: 
-  - app: "api-gateway"
-    dst-ns: "apigw"
+  - app: "apigw"
+    dstNs: "apigw"
     sha: "asdasd12312"
-    src-ns: "apigw-uat"
+    srcNs: "apigw-uat"
     tag: "1.0.0"
     public: true #optional
     partner: false #optional
     internal: true #optional
     cm: "" #optional
-    cm-mnt: "" #optional
-    cm-mnt-file: "" #optional
-    spring-uri: "" #optional
+    cmMnt: "" #optional
+    cmMntFile: "" #optional
+    springUri: "" #optional
     secretDb: "" #optional
     disableMigrate: "" #optional
 sql: "run.sql"

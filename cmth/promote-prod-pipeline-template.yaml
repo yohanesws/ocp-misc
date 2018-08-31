@@ -42,6 +42,19 @@ parameters:
   name: RELEASE_REPOSITORY_CREDENTIAL_SECRET
   required: true
   value: gitlab-cimb
+- description: The URL of the prod repository with your application source code.
+  displayName: Git Repository Prod URL
+  name: RELEASE_PROD_REPOSITORY_URL
+  required: true
+- description: The Branch of the prod repository with your application source code.
+  displayName: Git Repository Prod Branch
+  name: RELEASE_PROD_REPOSITORY_BRANCH
+  required: true
+- description: Git Prod Credential Secret.
+  displayName: Git Prod Secret Credential
+  name: RELEASE_PROD_REPOSITORY_CREDENTIAL_SECRET
+  required: true
+  value: gitlab-prod-cimb
 - description: The token credential for login to Destination repo
   displayName: Destination Token 
   name: DESTINATION_REPO_TOKEN
@@ -143,9 +156,12 @@ objects:
             try {
                 timeout(time: 20, unit: 'MINUTES') {
                   def projectCicd="${NAMESPACE_CICD}"
-                  def gitRepo="${RELEASE_REPOSITORY_URL}"
-                  def branch="${RELEASE_REPOSITORY_BRANCH}"
-                  def secretName="${RELEASE_REPOSITORY_CREDENTIAL_SECRET}"
+                  def gitSourceRepo="${RELEASE_REPOSITORY_URL}"
+                  def gitSourceBranch="${RELEASE_REPOSITORY_BRANCH}"
+                  def secretGitSource="${RELEASE_REPOSITORY_CREDENTIAL_SECRET}"
+                  def gitTargetRepo="${RELEASE_PROD_REPOSITORY_URL}"
+                  def gitTargetBranch="${RELEASE_PROD_REPOSITORY_BRANCH}"
+                  def secretGitTarget="${RELEASE_PROD_REPOSITORY_CREDENTIAL_SECRET}"
                   def sourceRepo="${SOURCE_REPO}"
                   def destRepo="${DESTINATION_REPO}"
                   def clusterSource="${SOURCE_CLUSTER_URL}"
@@ -161,8 +177,10 @@ objects:
                       sh "oc label secret ${PIPELINE_NAME}-source-repo-secret -n ${projectCicd} credential.sync.jenkins.openshift.io=true"
                       sh "oc label secret ${PIPELINE_NAME}-dest-repo-secret -n ${projectCicd} credential.sync.jenkins.openshift.io=true"
                       sh "oc label secret ${PIPELINE_NAME}-source-cluster-secret -n ${projectCicd} credential.sync.jenkins.openshift.io=true"
-
-                      git branch: branch, url: gitRepo , credentialsId: "${projectCicd}-${secretName}"
+                      
+                      sh "mkdir source || true"
+                      sh "cd source"
+                      git branch: gitSourceBranch, url: gitSourceRepo , credentialsId: "${projectCicd}-${secretGitSource}"
                       timeout(time:2, unit:'HOURS') {
                           env.VERSION = input message: 'Start Prod Promote?', ok: 'Promote!',
                                           parameters: [string(name: 'RELEASE_NAME', defaultValue: '', description: 'Release Note File Name')]
@@ -170,9 +188,24 @@ objects:
                       releaseName = env.VERSION
                       release = readYaml file: "${releaseName}"
                       echo "release:${release}"
+                      sh "cd .."
                     }
                     stage("Moving Release"){
-                      echo "Todo"
+                      sh "mkdir target || true"
+                      sh "cd target"
+                      withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: '${NAMESPACE_CICD}-${RELEASE_PROD_REPOSITORY_CREDENTIAL_SECRET}', usernameVariable: 'UNUSED',  passwordVariable:"GIT_TARGET_ACCESS_TOKEN"]]){
+                        sh "echo '${gitTargetRepo}'| tr 'https://' 'https://oauth2:${GIT_TARGET_ACCESS_TOKEN}' > gitTarget.repo"
+                        gitTargetRepo=readFile(gitTarget.repo).trim()
+                        sh "echo '${gitTargetRepo}'| tr 'http://' 'http://oauth2:${GIT_TARGET_ACCESS_TOKEN}' > gitTarget.repo"
+                        gitTargetRepo=readFile(gitTarget.repo).trim()
+                        
+                        git branch: gitTargetBranch, url: gitTargetRepo , credentialsId: "${projectCicd}-${secretGitSource}"
+                        sh "cp ../source/${releaseName} ."
+                        sh "git add ${releaseName} || true"
+                        sh "git commit -a -m 'add/update ${releaseName}'"
+                        sh "git push"
+                      }
+                      sh "cd .."
                     }
                   }
 
@@ -180,10 +213,10 @@ objects:
                     stage("Move Image") {
                       def tokenSource=""
                       def tokenDest=""
-                      withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: '${NAMESPACE_CICD}-${PIPELINE_NAME}-dest-repo-secret',  passwordVariable:"CRED_DEST_TOKEN"]]){
+                      withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: '${NAMESPACE_CICD}-${PIPELINE_NAME}-dest-repo-secret', usernameVariable: 'UNUSED',  passwordVariable:"CRED_DEST_TOKEN"]]){
                         tokenDest="${CRED_DEST_TOKEN}"
                       }
-                      withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: '${NAMESPACE_CICD}-${PIPELINE_NAME}-source-repo-secret',  passwordVariable:"CRED_SOURCE_TOKEN"]]){
+                      withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: '${NAMESPACE_CICD}-${PIPELINE_NAME}-source-repo-secret', usernameVariable: 'UNUSED',  passwordVariable:"CRED_SOURCE_TOKEN"]]){
                         tokenSource="${CRED_SOURCE_TOKEN}"
                       }
                       
@@ -218,7 +251,7 @@ objects:
                     stage ("configuring"){
                       def localToken = readFile('/var/run/secrets/kubernetes.io/serviceaccount/token').trim()
                       def sourceClusterToken =""
-                      withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: '${NAMESPACE_CICD}-${PIPELINE_NAME}-source-cluster-secret',  passwordVariable:"SRC_CLUSTER_TOKEN"]]){
+                      withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: '${NAMESPACE_CICD}-${PIPELINE_NAME}-source-cluster-secret', usernameVariable: 'UNUSED',  passwordVariable:"SRC_CLUSTER_TOKEN"]]){
                         sourceClusterToken="${SRC_CLUSTER_TOKEN}"
                       }
                       for(app in release.apps){
