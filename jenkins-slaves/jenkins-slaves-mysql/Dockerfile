@@ -11,8 +11,8 @@ USER root
 
 RUN yum repolist > /dev/null && \
     yum clean all && \
-    INSTALL_PKGS="mysql" && \
-    yum install -y --enablerepo=rhel-7-server-extras-rpms --setopt=tsflags=nodocs $INSTALL_PKGS && \
+    INSTALL_PKGS="rh-mysql57" && \
+    yum install -y --enablerepo=rhel-server-rhscl-7-rpms --setopt=tsflags=nodocs $INSTALL_PKGS && \
     rpm -V $INSTALL_PKGS && \
     yum clean all
 
