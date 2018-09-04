@@ -24,4 +24,14 @@ apps:
     cmMnt: "/deployments/config" #optional=
     springUri: "" #optional
     secretDb: "centralize-configuration" #optional
+  - app: "operational-tool"
+    dstNs: "apigw"
+    sha: "asdasd12312"
+    srcNs: "apigw-uat"
+    tag: "0"
+    internal: true #optional
+    cm: "operational-tool-0-cm" #optional
+    cmMnt: "/data/projects/operation_tool/config/operation_settings.py" #optional
+    cmMntFile: "operation_settings.py" #optional
+    disableMigrate: true #optional
 sql: "run.sql"
