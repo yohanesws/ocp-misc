@@ -1,0 +1,424 @@
+apiVersion: template.openshift.io/v1
+kind: Template
+labels:
+  template: promote-pipeline-prod-template
+message: >-
+  A Jenkins server will be automatically instantiated in this project to manage
+
+  the Pipeline BuildConfig created by this template.  You will be able to log in
+  to
+
+  it using your OpenShift user credentials.
+metadata:
+  annotations:
+    description: >-
+      This template showcases the new Jenkins Pipeline integration for spring
+      boot in OpenShift,
+
+      which performs continuous integration and deployment right on the
+      platform.
+
+      The template contains a Jenkinsfile - a definition of a multi-stage CI/CD
+      process - that
+
+      leverages the underlying OpenShift platform for dynamic and scalable
+
+      builds. OpenShift integrates the status of your pipeline builds into the
+      web
+
+      console allowing you to see your entire application lifecycle in a single
+      view.
+    iconClass: icon-jenkins
+    openshift.io/display-name: Promote Different cluster Generic Pipeline
+    tags: 'instant-app,promote,jenkins'
+  creationTimestamp: '2018-08-29T11:19:09Z'
+  name: promote-pipeline-prod-template
+  namespace: openshift
+  resourceVersion: '4438469'
+  selfLink: >-
+    /apis/template.openshift.io/v1/namespaces/openshift/templates/promote-pipeline-prod-template
+  uid: 599a0fe4-ab7d-11e8-a70c-005056ae4a45
+objects:
+  - apiVersion: v1
+    kind: Secret
+    labels:
+      credential.sync.jenkins.openshift.io: true
+    metadata:
+      name: '${PIPELINE_NAME}-source-cluster-secret'
+      namespace: '${NAMESPACE_CICD}'
+    stringData:
+      password: '${SOURCE_CLUSTER_TOKEN}'
+      username: unused
+    type: kubernetes.io/basic-auth
+  - apiVersion: v1
+    kind: Secret
+    labels:
+      credential.sync.jenkins.openshift.io: true
+    metadata:
+      name: '${PIPELINE_NAME}-dest-repo-secret'
+      namespace: '${NAMESPACE_CICD}'
+    stringData:
+      password: '${DESTINATION_REPO_TOKEN}'
+      username: unused
+    type: kubernetes.io/basic-auth
+  - apiVersion: v1
+    kind: Secret
+    labels:
+      credential.sync.jenkins.openshift.io: true
+    metadata:
+      name: '${PIPELINE_NAME}-source-repo-secret'
+      namespace: '${NAMESPACE_CICD}'
+    stringData:
+      password: '${SOURCE_REPO_TOKEN}'
+      username: unused
+    type: kubernetes.io/basic-auth
+  - apiVersion: v1
+    kind: BuildConfig
+    metadata:
+      labels:
+        name: '${PIPELINE_NAME}'
+      name: '${PIPELINE_NAME}'
+    spec:
+      strategy:
+        jenkinsPipelineStrategy:
+          jenkinsfile: |-
+            try {
+                timeout(time: 20, unit: 'MINUTES') {
+                  def projectCicd="${NAMESPACE_CICD}"
+                  def gitSourceRepo="${RELEASE_REPOSITORY_URL}"
+                  def gitSourceBranch="${RELEASE_REPOSITORY_BRANCH}"
+                  def secretGitSource="${RELEASE_REPOSITORY_CREDENTIAL_SECRET}"
+                  def gitTargetRepo="${RELEASE_PROD_REPOSITORY_URL}"
+                  def gitTargetBranch="${RELEASE_PROD_REPOSITORY_BRANCH}"
+                  def secretGitTarget="${RELEASE_PROD_REPOSITORY_CREDENTIAL_SECRET}"
+                  def sourceRepo="${SOURCE_REPO}"
+                  def destRepo="${DESTINATION_REPO}"
+                  def clusterSource="${SOURCE_CLUSTER_URL}"
+                  def suffixRouterInternal="${SUFFIX_ROUTER_INTERNAL}"
+                  def suffixRouterPartner="${SUFFIX_ROUTER_PARTNER}"
+                  def suffixRouterPublic="${SUFFIX_ROUTER_PUBLIC}"
+                  def releaseName=""
+                  def release
+
+
+                  node () {
+                    stage("Preparing"){
+                      sh "oc label secret ${PIPELINE_NAME}-source-repo-secret -n ${projectCicd} credential.sync.jenkins.openshift.io=true || true"
+                      sh "oc label secret ${PIPELINE_NAME}-dest-repo-secret -n ${projectCicd} credential.sync.jenkins.openshift.io=true || true"
+                      sh "oc label secret ${PIPELINE_NAME}-source-cluster-secret -n ${projectCicd} credential.sync.jenkins.openshift.io=true || true"
+                      
+                      git branch: gitSourceBranch, url: gitSourceRepo , credentialsId: "${projectCicd}-${secretGitSource}"
+                      timeout(time:2, unit:'HOURS') {
+                          env.VERSION = input message: 'Start Prod Promote?', ok: 'Promote!',
+                                          parameters: [string(name: 'RELEASE_NAME', defaultValue: '', description: 'Release Note File Name')]
+                      }
+                      releaseName = env.VERSION
+                      release = readYaml file: "${releaseName}"
+                      echo "release:${release}"
+                      sh "rm -rf target && mkdir target"
+                      sh "cp ${releaseName} target"
+                    }
+                    stage("Moving Release"){
+                      withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: '${NAMESPACE_CICD}-${RELEASE_PROD_REPOSITORY_CREDENTIAL_SECRET}', usernameVariable: 'UNUSED',  passwordVariable:"GIT_TARGET_ACCESS_TOKEN"]]){
+                        sh "echo '${gitTargetRepo}' > gitTarget.repo"
+                        sh "sed -i 's|https://|https://oauth2:${GIT_TARGET_ACCESS_TOKEN}@|g'  gitTarget.repo"
+                        sh "sed -i 's|http://|http://oauth2:${GIT_TARGET_ACCESS_TOKEN}@|g'  gitTarget.repo"
+                        gitTargetRepo=readFile('gitTarget.repo').trim()
+                        sh "rm -f gitTarget.repo"
+                        
+                        git branch: gitTargetBranch, url: gitTargetRepo , credentialsId: "${projectCicd}-${secretGitSource}"
+                        sh "git config user.email 'jenkins-ocp@cimb-thai.com'"
+                        sh "git config user.name 'jenkins-ocp'"
+                        sh "cp -f target/${releaseName} ${releaseName}"
+                        sh "git add ${releaseName} || true"
+                        sh "git commit -a -m 'add/update ${releaseName}' || true"
+                        sh "git push origin master"
+                      }
+                    }
+                  }
+
+                  node('image-mgmt'){
+                    stage("Move Image") {
+                      def tokenSource=""
+                      def tokenDest=""
+                      withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: '${NAMESPACE_CICD}-${PIPELINE_NAME}-dest-repo-secret', usernameVariable: 'UNUSED',  passwordVariable:"CRED_DEST_TOKEN"]]){
+                        tokenDest="${CRED_DEST_TOKEN}"
+                      }
+                      withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: '${NAMESPACE_CICD}-${PIPELINE_NAME}-source-repo-secret', usernameVariable: 'UNUSED',  passwordVariable:"CRED_SOURCE_TOKEN"]]){
+                        tokenSource="${CRED_SOURCE_TOKEN}"
+                      }
+                      
+                      def localToken = readFile('/var/run/secrets/kubernetes.io/serviceaccount/token').trim()
+
+                      for(app in release.apps){
+                        def appName="${app.app}"
+                        def tag="${app.tag}"
+                        def srcNs="${app.srcNs}"
+                        def dstNs="${app.dstNs}"
+
+                        echo "Promoting ${sourceRepo}/${srcNs}/${appName}:${tag} -> ${destRepo}/${dstNs}/${appName}:${tag}"
+                        sh """
+                        set +x
+                        skopeo copy --remove-signatures \
+                          --src-creds openshift:${tokenSource} --src-tls-verify=false \
+                          --dest-creds openshift:${tokenDest}  --dest-tls-verify=false \
+                          docker://${sourceRepo}/${srcNs}/${appName}:${tag}  docker://${destRepo}/${dstNs}/${appName}:${tag}
+                        """
+
+                        echo "promoting ${destRepo}/${dstNs}/${appName}:${tag} -> docker-registry.default.svc:5000/${dstNs}/${appName}:${tag}"
+                        sh """
+                        set +x
+                        skopeo copy --remove-signatures \
+                          --dest-creds openshift:${localToken} --dest-cert-dir=/run/secrets/kubernetes.io/serviceaccount/ \
+                          --src-creds openshift:${tokenDest}  --src-tls-verify=false \
+                          docker://${destRepo}/${dstNs}/${appName}:${tag}  docker://docker-registry.default.svc:5000/${dstNs}/${appName}:${tag}
+                        """
+                      }
+                      
+                    }
+                    stage ("Configuring"){
+                      def localToken = readFile('/var/run/secrets/kubernetes.io/serviceaccount/token').trim()
+                      def sourceClusterToken =""
+                      withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: '${NAMESPACE_CICD}-${PIPELINE_NAME}-source-cluster-secret', usernameVariable: 'UNUSED',  passwordVariable:"SRC_CLUSTER_TOKEN"]]){
+                        sourceClusterToken="${SRC_CLUSTER_TOKEN}"
+                      }
+                      for(app in release.apps){
+                        def srcNs="${app.srcNs}"
+                        def dstNs="${app.dstNs}"
+                        
+                        def cm =""
+                        if (app.cm) cm="${app.cm}"
+
+                        if (cm != ""){
+                          sh "oc login ${clusterSource} --token=${sourceClusterToken} --insecure-skip-tls-verify=true"
+                          sh "oc export cm/${cm} -n ${srcNs} >  cm-staging.yml"
+
+                          sh "oc login kubernetes.default.svc:443 --token=${localToken} --insecure-skip-tls-verify=true"
+                          sh "oc create -f cm-staging.yml -n ${dstNs} || true"
+                        }
+                      }
+                    }
+                  }
+                  node () {
+                    stage("Deploying") {
+                      def deploySummary ="SUMMARY: \n"
+                      deploySummary = deploySummary + "======\n"
+                      for (app in release.apps){
+                          deploySummary=deploySummary+"${app.app}:${app.tag} to ${app.dstNs} \n"
+                      }
+                      deploySummary = deploySummary + "DETAIL: \n"
+                      deploySummary = deploySummary + "======= \n"
+                      timeout (time:120, unit: 'MINUTES'){
+                          input message : "Deploy all to Prod? ", ok:"Deploy",
+                                parameters: [[$class:'TextParameterDefinition',name: 'RELEASE_DETAIL', defaultValue:deploySummary+""+release.apps , description: 'Release Detail Information']]
+                      }
+                      for(app in release.apps){
+                        
+                        def appName="${app.app}"
+                        def version="${app.tag}"
+                        def projectTarget="${app.dstNs}"
+                        
+                        def needRouterPublic=false
+                        if (app.public) needRouterPublic=app.public
+                        
+                        def needRouterPartner=false
+                        if (app.partner) needRouterPartner=app.partner
+                        
+                        def needRouterInternal=false
+                        if (app.internal) needRouterInternal=app.internal
+                        
+                        def configMap=""
+                        if (app.cm) configMap="${app.cm}"
+                        
+                        def cmMnt=""
+                        if (app.cmMnt) cmMnt="${app.cmMnt}"
+                        
+                        def cmMntFile=""
+                        if (app.cmMntFile) cmMntFile="${app.cmMntFile}"
+
+                        def secretDb=""
+                        if(app.secretDb) secretDb="${app.secretDb}"
+
+                        def springUri=""
+                        if(app.springUri) springUri="${app.springUri}"
+
+                        def disableMigrate=""
+                        if(app.disableMigrate) disableMigrate="${app.disableMigrate}"
+
+                        def dcNotPresent = false
+                        try {
+                          sh "oc get dc ${appName} -o jsonpath='{.metadata.name}' -n ${projectTarget}"
+                        }catch(err){
+                          dcNotPresent = true
+                        }
+
+                        if (dcNotPresent){
+                          sh "oc tag ${projectTarget}/${appName}:${version} ${projectTarget}/${appName}:latest"
+                          sh "oc new-app ${appName}:latest --name=${appName} -n ${projectTarget} || true"
+                          sh "oc rollout cancel dc/${appName} -n ${projectTarget} || true"
+                          sh "oc rollout pause dc/${appName} -n ${projectTarget}"  
+                          
+                          if (configMap !=  "" && cmMnt !=""){
+                            if(cmMntFile!=""){
+                              sh "oc set volume dc/${appName} -n ${projectTarget} --add --name=config-volume -t configmap --configmap-name=${configMap} --mount-path=${cmMnt} --sub-path=${cmMntFile}"
+                            }else{
+                              sh "oc set volume dc/${appName} -n ${projectTarget} --add --name=config-volume -t configmap --configmap-name=${configMap} --mount-path=${cmMnt}"
+                            }
+                          }
+
+                          if (secretDb !=  ""){
+                            sh "oc set env --from=secret/${secretDb} --prefix=SPRING_DATASOURCE_ dc/${appName} -n ${projectTarget}"
+                            sh "oc set env dc/${appName} SERVER_PORT=8080 -n ${projectTarget} || true"
+                          }
+
+                          if (springUri != ""){
+                            sh "oc set env dc/${appName} SPRING_CLOUD_CONFIG_URI=${springUri} -n ${projectTarget}"
+                            sh "oc set env dc/${appName} SERVER_PORT=8080 -n ${projectTarget} || true"
+                          }
+
+                          if (disableMigrate != ""){
+                            sh "oc set env dc/${appName} DISABLE_MIGRATE=true -n ${projectTarget}"
+                          }
+
+                          //apply timezone
+                          sh "oc set env dc/${appName} TZ=Asia/Bangkok -n ${projectTarget}"
+
+                          sh "oc rollout resume dc/${appName} -n ${projectTarget}"  
+                          sh "oc rollout status dc/${appName} -w -n ${projectTarget}"
+                          
+                        }else{
+                          sh "oc rollout pause dc/${appName} -n ${projectTarget}"  
+                          sh "oc tag ${projectTarget}/${appName}:${version} ${projectTarget}/${appName}:latest"
+                          sh "oc rollout resume dc/${appName} -n ${projectTarget}"  
+                          sh "oc rollout status dc/${appName} -w -n ${projectTarget}"
+                          echo "just update the image"
+                        }
+                        
+                        if (needRouterInternal) {
+                          sh "oc create route edge ${appName}-internal  --service='${appName}' --hostname='${appName}-${projectTarget}${suffixRouterInternal}' -n ${projectTarget} || true"
+                        }else{
+                          sh "oc delete route ${appName}-internal -n ${projectTarget} || true"
+                        }
+                        if (needRouterPartner) {
+                          sh "oc create route edge ${appName}-partner --service='${appName}' --hostname='${appName}-${projectTarget}${suffixRouterPartner}' -n ${projectTarget} || true"
+                          sh "oc label route ${appName}-partner exposure=partner -n ${projectTarget} || true"
+                        }else{
+                          sh "oc delete route ${appName}-partner -n ${projectTarget} || true"
+                        }
+                        if (needRouterPublic) {
+                          sh "oc create route edge ${appName}-public  --service='${appName}' --hostname='${appName}-${projectTarget}${suffixRouterPublic}' -n ${projectTarget} || true"
+                          sh "oc label route ${appName}-public exposure=public -n ${projectTarget} || true"
+                        }else{
+                          sh "oc delete route ${appName}-public -n ${projectTarget} || true"
+                        }
+                      }
+                    }
+                  }
+              }
+            } catch (err) {
+                echo "in catch block"
+                echo "Caught: ${err}"
+                currentBuild.result = 'FAILURE'
+                throw err
+            } // JenkinsPipeline
+        type: JenkinsPipeline
+      triggers:
+        - github:
+            secret: '${GITHUB_WEBHOOK_SECRET}'
+          type: GitHub
+        - generic:
+            secret: '${GENERIC_WEBHOOK_SECRET}'
+          type: Generic
+parameters:
+  - description: The name assigned to pipeline defined in this template.
+    displayName: Pipeline Name
+    name: PIPELINE_NAME
+    required: true
+  - description: The OpenShift Namespace where the jenkins running.
+    displayName: Namespace CICD
+    name: NAMESPACE_CICD
+    required: true
+    value: cicd-prod
+  - description: The URL of the repository with your application source code.
+    displayName: Git Repository URL
+    name: RELEASE_REPOSITORY_URL
+    required: true
+  - description: The Branch of the repository with your application source code.
+    displayName: Git Repository Branch
+    name: RELEASE_REPOSITORY_BRANCH
+    required: true
+  - description: Git Credential Secret.
+    displayName: Git Secret Credential
+    name: RELEASE_REPOSITORY_CREDENTIAL_SECRET
+    required: true
+    value: gitlab-cimb
+  - description: The URL of the prod repository with your application source code.
+    displayName: Git Repository Prod URL
+    name: RELEASE_PROD_REPOSITORY_URL
+    required: true
+  - description: The Branch of the prod repository with your application source code.
+    displayName: Git Repository Prod Branch
+    name: RELEASE_PROD_REPOSITORY_BRANCH
+    required: true
+  - description: Git Prod Credential Secret.
+    displayName: Git Prod Secret Credential
+    name: RELEASE_PROD_REPOSITORY_CREDENTIAL_SECRET
+    required: true
+    value: gitlab-prod-cimb
+  - description: The token credential for login to Destination repo
+    displayName: Destination Token
+    name: DESTINATION_REPO_TOKEN
+    required: true
+  - description: Destination Repository Address.
+    displayName: Destination Repository
+    name: DESTINATION_REPO
+    required: true
+    value: docker.gizmo.raindrop.cimbthai.com
+  - description: The token credential for login to Source repo
+    displayName: Source Token
+    name: SOURCE_REPO_TOKEN
+    required: true
+  - description: Source Repository Address.
+    displayName: Source Repository
+    name: SOURCE_REPO
+    required: true
+    value: docker.gizmo.raindrop.cimbthai.com
+  - description: Source Cluster URL Address.
+    displayName: Source Cluster URL
+    name: SOURCE_CLUSTER_URL
+    required: true
+    value: 'console.ocp.cimbthai.com:8443'
+  - description: Source Cluster Token credential.
+    displayName: Source Cluster Token
+    name: SOURCE_CLUSTER_TOKEN
+    required: true
+  - description: >-
+      Github trigger secret.  A difficult to guess string encoded as part of the
+      webhook URL.  Not encrypted.
+    displayName: GitHub Webhook Secret
+    from: '[a-zA-Z0-9]{40}'
+    generate: expression
+    name: GITHUB_WEBHOOK_SECRET
+    required: true
+  - description: A secret string used to configure the Generic webhook.
+    displayName: Generic Webhook Secret
+    from: '[a-zA-Z0-9]{40}'
+    generate: expression
+    name: GENERIC_WEBHOOK_SECRET
+    required: true
+  - description: Suffix Router Internal
+    displayName: Suffix Router Internal
+    name: SUFFIX_ROUTER_INTERNAL
+    required: true
+    value: .rainbow.cimbthai.internal
+  - description: Suffix Router Partner
+    displayName: Suffix Router Partner
+    name: SUFFIX_ROUTER_PARTNER
+    required: true
+    value: .partner.cimbthai.internal
+  - description: Suffix Router Public
+    displayName: Suffix Router Public
+    name: SUFFIX_ROUTER_PUBLIC
+    required: true
+    value: .digital.cimbthai.internal
+
