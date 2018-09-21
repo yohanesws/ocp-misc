@@ -1,7 +1,7 @@
 apiVersion: template.openshift.io/v1
 kind: Template
 labels:
-  template: promote-pipeline-prod-template
+  template: sakti-promote-pipeline-prod-with-db-template
 message: >-
   A Jenkins server will be automatically instantiated in this project to manage
 
@@ -29,15 +29,15 @@ metadata:
       console allowing you to see your entire application lifecycle in a single
       view.
     iconClass: icon-jenkins
-    openshift.io/display-name: Promote Different cluster Generic Pipeline
+    openshift.io/display-name: Sakti Promote UAT to PROD Pipeline
     tags: 'instant-app,promote,jenkins'
-  creationTimestamp: '2018-08-28T07:09:04Z'
-  name: promote-pipeline-prod-template
+  creationTimestamp: '2018-09-07T09:33:30Z'
+  name: sakti-promote-pipeline-prod-with-db-template
   namespace: openshift
-  resourceVersion: '1168305'
+  resourceVersion: '6502184'
   selfLink: >-
-    /apis/template.openshift.io/v1/namespaces/openshift/templates/promote-pipeline-prod-template
-  uid: 3fa5ddc9-aa91-11e8-ae55-001a4a160110
+    /apis/template.openshift.io/v1/namespaces/openshift/templates/sakti-promote-pipeline-prod-with-db-template
+  uid: 14f0dfaf-b281-11e8-9edd-001a4a160110
 objects:
   - apiVersion: v1
     kind: Secret
@@ -48,6 +48,16 @@ objects:
       namespace: '${NAMESPACE_CICD}'
     stringData:
       secrettext: '${DEST_CLUSTER_TOKEN}'
+    type: Opaque
+  - apiVersion: v1
+    kind: Secret
+    metadata:
+      name: '${PIPELINE_NAME}-db-secret'
+      namespace: '${NAMESPACE_CICD}'
+    stringData:
+      HOSTNAME: '${DB_HOST}'
+      PASSWORD: '${DB_PASSWORD}'
+      USERNAME: '${DB_USERNAME}'
     type: Opaque
   - apiVersion: v1
     kind: BuildConfig
@@ -66,15 +76,25 @@ objects:
                   def projectTarget="${DEST_APP_NAMESPACE}"
                   def projectSource="${SOURCE_APP_NAMESPACE}"
                   def configMap="${CONFIG_MAP_EAP}"
-                  def secretDb="${SECRET_DATABASE}"
+                  def secretDb="${PIPELINE_NAME}-db-secret"
                   def version=""
                   def extRegistry="${DEST_REPO}"
                   def ocpDest="${DEST_CLUSTER_URL}"
-
+                  def namespaceCICD="${NAMESPACE_CICD}"
+                  def now = new Date()
+                  def current = now.format("yyyyMMdd.HHmm", TimeZone.getTimeZone('Asia/Bangkok'))
+                  def secretNexus = "${SECRET_NEXUS}"
+                  def sourceSaktiEarNexusURL = "${SOURCE_SAKTI_EAP_NEXUS_URL}"
+                  def sourceSaktiUiNexusURL = "${SOURCE_SAKTI_UI_NEXUS_URL}"
+                  def targetSaktiUiNexusURL = "${TARGET_SAKTI_UI_NEXUS_URL}"
+                  def targetSaktiEarNexusURL = "${TARGET_SAKTI_EAP_NEXUS_URL}"
+                  def projectJasper = "${JASPER_NAMESPACE}"
+                  def jasperAppName = "${JASPER_APP_NAME}"
 
                   node () {
                     stage("Preparing"){
-                     sh "oc get is/${appName} -o jsonpath='{.spec.tags.*.name}' -n ${projectSource} > version"
+                     //sh "oc get is/${appName} -o jsonpath='{.spec.tags.*.name}' -n ${projectSource} > version"
+                     sh "oc get is/${appName} -o jsonpath='{.spec.tags[?(@.name != \"latest\")].name}' -n ${projectSource} > version"
                      versions = readFile('version')
                      
                      versions = versions.replaceAll("\\s","\n")
@@ -112,16 +132,12 @@ objects:
                          sh "oc export cm/${configMap} -n ${projectSource} >  cm-staging.yml"
                       }
 
-                      // checking if there db secret configure for this version
-                      try {
-                        sh "oc get secret ${appName}-${version}-db -o jsonpath='{.metadata.name}' -n ${projectSource} |  tr -d '\n'  > secret.name"
-                        secretDb= readFile('secret.name')
-                      }catch(err){
-                        secretDb = ""
-                      }
-
                       if (secretDb!=""){
-                         sh "oc export secret/${secretDb} -n ${projectSource} >  secret-staging.yml"
+                         sh "oc export secret/${secretDb} -n ${namespaceCICD} >  secret-staging.yml"
+                      }
+                      
+                      if(secretNexus!=""){
+                          sh "oc export secret/${secretNexus} -n ${namespaceCICD} > nexus-staging.yml"
                       }
                       withCredentials([string(credentialsId: '${PIPELINE_NAME}-dest-cluster-secret', variable: 'DEST_TOKEN')]) {
                         sh "oc login ${ocpDest} --token=${DEST_TOKEN} --insecure-skip-tls-verify=true"
@@ -131,6 +147,9 @@ objects:
                       }
                       if (secretDb!=""){
                          sh "oc create -f  secret-staging.yml -n ${projectTarget} || true"
+                      }
+                      if (secretNexus!=""){
+                          sh "oc create -f  nexus-staging.yml -n ${projectTarget} || true"
                       }
                     }
                     stage("Deploying") {
@@ -162,6 +181,10 @@ objects:
                         //sh "oc expose svc ${appName} -n ${projectTarget}"
                         sh "oc expose svc ${appName} -n ${projectTarget} || true"
                         
+                        sh "oc get route/${appName} -o jsonpath='{.spec.host}' -n ${projectTarget} > ext.temp"
+                        def ext=readFile("ext.temp")
+                        sh "oc set env dc/${appName} EXTERNAL_ROUTE_NAME=${ext} -n ${projectTarget}"
+                        
                       }else{
                         sh "oc rollout pause dc/${appName} -n ${projectTarget}"  
                         sh "oc tag ${projectTarget}/${appName}:${version} ${projectTarget}/${appName}:latest"
@@ -169,6 +192,57 @@ objects:
                         sh "oc rollout status dc/${appName} -w -n ${projectTarget}"
                         echo "just update the image"
                       }
+                    }
+                    stage("Promote") {
+                        sh "curl GET ${sourceSaktiEarNexusURL} > eardev.xml"
+                        sh "curl GET ${sourceSaktiUiNexusURL} > uidev.xml"
+                        
+                        def ui=readFile("uidev.xml")
+                        def ear=readFile("eardev.xml")
+                        
+                        def resultUI = extractFunction(ui)
+                        def resultEAR = extractFunction(ear)
+                        
+                        def fileNameUI = resultUI.filename
+                        def downloadUrlUI = resultUI.url
+                        def fileNameEAR = resultEAR.filename
+                        def downloadUrlEAR = resultEAR.url
+                        
+                        sh "oc get secret ${secretNexus} -n ${projectTarget} -o template --template='{{.data.USERNAME}}'|base64 -d|tr -d '\n' > user.secret"
+                        sh "oc get secret ${secretNexus} -n ${projectTarget} -o template --template='{{.data.PASSWORD}}'|base64 -d|tr -d '\n' > pass.secret"
+                        def user=readFile('user.secret')
+                        def pass=readFile('pass.secret')
+                        
+                        sh "curl -X GET -u ${user}:${pass} ${downloadUrlUI} -O"
+                        sh "curl -X GET -u ${user}:${pass} ${downloadUrlEAR} -O"
+                        
+                        sh "unzip -o ${fileNameUI}"
+                        sh "oc get route/${appName} -o jsonpath='{.spec.host}' -n ${projectTarget} > route.temp"
+                        def route=readFile('route.temp')
+                        def fileWithoutExt = fileNameUI.substring(0, fileNameUI.length()-4)
+
+                        sh "echo 'jaxws.endpoint.address=http\\://${route}' > ${fileWithoutExt}/conf/jaxws.properties"
+                        
+                        sh "oc get route/${jasperAppName} -o jsonpath='{.spec.host}' -n ${projectJasper} > routeJasper.temp"
+                        def routeJasper=readFile('routeJasper.temp')
+                        sh "echo 'jasperreport.url=http\\://${routeJasper}/jasperserver/services/repository' > ${fileWithoutExt}/sakti2-config.properties"
+                        sh "echo 'jasperreport.userName=jasperadmin' >> ${fileWithoutExt}/sakti2-config.properties"
+                        sh "echo 'jasperreport.password=jasperadmin' >> ${fileWithoutExt}/sakti2-config.properties"
+                        sh "echo 'sftp.isLocal=false' >> ${fileWithoutExt}/sakti2-config.properties"
+                        sh "echo 'sftp.directory=/home/spanftp2/sakti_app/adk' >> ${fileWithoutExt}/sakti2-config.properties"
+                        sh "echo 'sftp.password=spanftp2' >> ${fileWithoutExt}/sakti2-config.properties"
+                        sh "echo 'sftp.userName=spanftp2' >> ${fileWithoutExt}/sakti2-config.properties"
+                        sh "echo 'sftp.url=10.242.143.72' >> ${fileWithoutExt}/sakti2-config.properties"
+                        sh "echo 'sftp.port=22' >> ${fileWithoutExt}/sakti2-config.properties"
+                        sh "echo 'database.type=oracle' >> ${fileWithoutExt}/sakti2-config.properties"
+                        
+                        sh "rm -f *.temp"
+                        sh "zip -r sakti-ui-${version.toUpperCase()}-${current}-from-${fileWithoutExt}.zip ${fileWithoutExt}"
+                        sh "mv ${fileNameEAR} sakti-ear-${version.toUpperCase()}-${current}-from-${fileNameEAR}"
+                        
+                        sh "curl -v -u ${user}:${pass} --upload-file sakti-ui-${version.toUpperCase()}-${current}-from-${fileNameUI} ${targetSaktiUiNexusURL}"
+                        sh "curl -v -u ${user}:${pass} --upload-file sakti-ear-${version.toUpperCase()}-${current}-from-${fileNameEAR} ${targetSaktiEarNexusURL}"
+                        echo "AAA"
                     }
                   }
               }
@@ -178,6 +252,21 @@ objects:
                 currentBuild.result = 'FAILURE'
                 throw err
             } // JenkinsPipeline
+            @NonCPS
+            Map extractFunction(def file) {
+                try {
+                    def response = new XmlSlurper().parseText(file)
+                    def size = response.data.'content-item'.size()-1
+                    def downloadURL = response.data.'content-item'[size].resourceURI.text()
+                    def fileName = response.data.'content-item'[size].text.text()
+                    return [url:downloadURL, filename:fileName]
+                } catch (Exception e) {
+                    echo "in catch block"
+                    echo "Caught: ${e}"
+                    currentBuild.result = 'FAILURE'
+                    throw e
+                }
+            }
         type: JenkinsPipeline
       triggers:
         - github:
@@ -217,12 +306,56 @@ parameters:
     name: DEST_CLUSTER_URL
     required: true
     value: 'kpbsdc-prdocpmaster.kemenkeu.go.id:8443'
-  - description: The configmap name that need to load as environment variable.
+  - description: >-
+      The configmap name from source namespace that need to load as environment
+      variable.
     displayName: Config Map EAP
     name: CONFIG_MAP_EAP
-  - description: The secret name that need to load as environment variable.
-    displayName: Secret  Database
-    name: SECRET_DATABASE
+    required: true
+  - description: The secret of credential nexus to load from this namespace.
+    displayName: Secret Nexus
+    name: SECRET_NEXUS
+    required: true
+  - description: The database Hostname of database defined in this template
+    displayName: Database Name
+    name: DB_HOST
+    required: true
+  - description: The username of database defined in this template.
+    displayName: Database Username
+    name: DB_USERNAME
+    required: true
+  - description: The password of database defined in this template.
+    displayName: Database Password
+    name: DB_PASSWORD
+    required: true
+  - description: >-
+      The namespace/project of which jasperserver application is assigned in
+      Production.
+    displayName: JasperServer Application Namespace/Project
+    name: JASPER_NAMESPACE
+    required: true
+  - description: >-
+      The name of jasperserver application in jasperserver namespace/project in
+      Production
+    displayName: JasperServer Application Name
+    name: JASPER_APP_NAME
+    required: true
+  - description: Source URL to get sakti ear from nexus
+    displayName: Source of Sakti EAR Nexus Url
+    name: SOURCE_SAKTI_EAP_NEXUS_URL
+    required: true
+  - description: Source URL to get sakti ui from nexus
+    displayName: Source of Sakti UI Nexus Url
+    name: SOURCE_SAKTI_UI_NEXUS_URL
+    required: true
+  - description: Target URL to deploy sakti ear to nexus
+    displayName: Target of Sakti EAR Nexus Url
+    name: TARGET_SAKTI_EAP_NEXUS_URL
+    required: true
+  - description: Target URL to deploy sakti ui to nexus
+    displayName: Target of Sakti UI Nexus Url
+    name: TARGET_SAKTI_UI_NEXUS_URL
+    required: true
   - description: The OpenShift Namespace where the jenkins running.
     displayName: Namespace CICD
     name: NAMESPACE_CICD

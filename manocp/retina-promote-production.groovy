@@ -55,11 +55,19 @@ try {
                     input message : "Deploy to Production", ok:"Deploy"
                 }
                 for (image in apps){
-                    sh "oc get dc ${image} -o jsonpath='{.metadata.name}' -n ${projectProd} > dc"
-                    dc = readFile('dc').trim()
-                    echo 'dc ${dc}'
+                    // sh "oc get dc ${image} -o jsonpath='{.metadata.name}' -n ${projectProd} > dc"
+                    // dc = readFile('dc').trim()
+                    // echo 'dc ${dc}'
+                    
+                    def dcNotPresent = false
+                    try {
+                        sh "oc get dc ${image} -o jsonpath='{.metadata.name}' -n ${projectProd}"
+                    }catch(err){
+                        dcNotPresent = true
+                    }
                     sh "oc tag ${cicd}/${projectStaging}-${image}:latest ${projectProd}/${image}:latest"
-                    if (dc.contains('Error')){
+                    // if (dc.contains('Error')){
+                    if (dcNotPresent){
                         //sh "oc delete dc,svc,route -l app=${image} -n ${projectProd}"
                         sh "oc new-app ${image} -n ${projectProd}"
                         sh "oc rollout pause dc/${image} -n ${projectProd}"

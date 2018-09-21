@@ -1,7 +1,7 @@
 apiVersion: template.openshift.io/v1
 kind: Template
 labels:
-  template: promote-pipeline-prod-template
+  template: promote-pipeline-prod-with-db-template
 message: >-
   A Jenkins server will be automatically instantiated in this project to manage
 
@@ -29,15 +29,15 @@ metadata:
       console allowing you to see your entire application lifecycle in a single
       view.
     iconClass: icon-jenkins
-    openshift.io/display-name: Promote Different cluster Generic Pipeline
+    openshift.io/display-name: Promote Different cluster with DB Generic Pipeline
     tags: 'instant-app,promote,jenkins'
-  creationTimestamp: '2018-08-28T07:09:04Z'
-  name: promote-pipeline-prod-template
+  creationTimestamp: '2018-09-04T04:02:20Z'
+  name: promote-pipeline-prod-with-db-template
   namespace: openshift
-  resourceVersion: '1168305'
+  resourceVersion: '2221698'
   selfLink: >-
-    /apis/template.openshift.io/v1/namespaces/openshift/templates/promote-pipeline-prod-template
-  uid: 3fa5ddc9-aa91-11e8-ae55-001a4a160110
+    /apis/template.openshift.io/v1/namespaces/openshift/templates/promote-pipeline-prod-with-db-template
+  uid: 5254291c-aff7-11e8-9edd-001a4a160110
 objects:
   - apiVersion: v1
     kind: Secret
@@ -48,6 +48,16 @@ objects:
       namespace: '${NAMESPACE_CICD}'
     stringData:
       secrettext: '${DEST_CLUSTER_TOKEN}'
+    type: Opaque
+  - apiVersion: v1
+    kind: Secret
+    metadata:
+      name: '${PIPELINE_NAME}-db-secret'
+      namespace: '${NAMESPACE_CICD}'
+    stringData:
+      HOSTNAME: '${DB_HOST}'
+      PASSWORD: '${DB_PASSWORD}'
+      USERNAME: '${DB_USERNAME}'
     type: Opaque
   - apiVersion: v1
     kind: BuildConfig
@@ -66,10 +76,11 @@ objects:
                   def projectTarget="${DEST_APP_NAMESPACE}"
                   def projectSource="${SOURCE_APP_NAMESPACE}"
                   def configMap="${CONFIG_MAP_EAP}"
-                  def secretDb="${SECRET_DATABASE}"
+                  def secretDb="${PIPELINE_NAME}-db-secret"
                   def version=""
                   def extRegistry="${DEST_REPO}"
                   def ocpDest="${DEST_CLUSTER_URL}"
+                  def namespaceCICD="${NAMESPACE_CICD}"
 
 
                   node () {
@@ -112,16 +123,8 @@ objects:
                          sh "oc export cm/${configMap} -n ${projectSource} >  cm-staging.yml"
                       }
 
-                      // checking if there db secret configure for this version
-                      try {
-                        sh "oc get secret ${appName}-${version}-db -o jsonpath='{.metadata.name}' -n ${projectSource} |  tr -d '\n'  > secret.name"
-                        secretDb= readFile('secret.name')
-                      }catch(err){
-                        secretDb = ""
-                      }
-
                       if (secretDb!=""){
-                         sh "oc export secret/${secretDb} -n ${projectSource} >  secret-staging.yml"
+                         sh "oc export secret/${secretDb} -n ${namespaceCICD} >  secret-staging.yml"
                       }
                       withCredentials([string(credentialsId: '${PIPELINE_NAME}-dest-cluster-secret', variable: 'DEST_TOKEN')]) {
                         sh "oc login ${ocpDest} --token=${DEST_TOKEN} --insecure-skip-tls-verify=true"
@@ -220,9 +223,18 @@ parameters:
   - description: The configmap name that need to load as environment variable.
     displayName: Config Map EAP
     name: CONFIG_MAP_EAP
-  - description: The secret name that need to load as environment variable.
-    displayName: Secret  Database
-    name: SECRET_DATABASE
+  - description: The database Hostname of database defined in this template
+    displayName: Database Name
+    name: DB_HOST
+    required: true
+  - description: The username of database defined in this template.
+    displayName: Database Username
+    name: DB_USERNAME
+    required: true
+  - description: The password of database defined in this template.
+    displayName: Database Password
+    name: DB_PASSWORD
+    required: true
   - description: The OpenShift Namespace where the jenkins running.
     displayName: Namespace CICD
     name: NAMESPACE_CICD

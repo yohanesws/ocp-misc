@@ -210,13 +210,14 @@ objects:
                   }
                   node () {
                     stage("Deploying") {
-                      def deploySummary ="SUMMARY: \n"
-                      deploySummary = deploySummary + "======\n"
+                      def deploySummary = "Release Name: ${releaseName}\n===========================\n"
+                      deploySummary = deploySummary + "SUMMARY: \n"
+                      deploySummary = deploySummary + "------------------------\n"
                       for (app in release.apps){
                           deploySummary=deploySummary+"${app.app}:${app.tag} to ${app.dstNs} \n"
                       }
                       deploySummary = deploySummary + "DETAIL: \n"
-                      deploySummary = deploySummary + "======= \n"
+                      deploySummary = deploySummary + "-------------------------\n"
                       timeout (time:120, unit: 'MINUTES'){
                           input message : "Deploy all to Prod? ", ok:"Deploy",
                                 parameters: [[$class:'TextParameterDefinition',name: 'RELEASE_DETAIL', defaultValue:deploySummary+""+release.apps , description: 'Release Detail Information']]

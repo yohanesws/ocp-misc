@@ -1,7 +1,7 @@
 apiVersion: template.openshift.io/v1
 kind: Template
 labels:
-  template: eap-pipeline-with-db-template
+  template: sakti-pipeline-with-db-template
 message: >-
   A Jenkins server will be automatically instantiated in this project to manage
 
@@ -29,15 +29,15 @@ metadata:
       console allowing you to see your entire application lifecycle in a single
       view.
     iconClass: icon-jenkins
-    openshift.io/display-name: EAP Pipeline With DB
+    openshift.io/display-name: Sakti Pipeline With DB
     tags: 'instant-app,eap,jenkins'
-  creationTimestamp: '2018-08-28T04:22:11Z'
-  name: eap-pipeline-with-db-template
+  creationTimestamp: '2018-09-07T08:28:35Z'
+  name: sakti-pipeline-with-db-template
   namespace: openshift
-  resourceVersion: '3968888'
+  resourceVersion: '6238416'
   selfLink: >-
-    /apis/template.openshift.io/v1/namespaces/openshift/templates/eap-pipeline-with-db-template
-  uid: ef0ed9b6-aa79-11e8-ae55-001a4a160110
+    /apis/template.openshift.io/v1/namespaces/openshift/templates/sakti-pipeline-with-db-template
+  uid: 033f0308-b278-11e8-9edd-001a4a160110
 objects:
   - apiVersion: v1
     kind: Secret
@@ -48,6 +48,15 @@ objects:
       HOSTNAME: '${DB_HOST}'
       PASSWORD: '${DB_PASSWORD}'
       USERNAME: '${DB_USERNAME}'
+    type: Opaque
+  - apiVersion: v1
+    kind: Secret
+    metadata:
+      name: '${PIPELINE_NAME}-nexus-perben'
+      namespace: '${NAMESPACE_CICD}'
+    stringData:
+      PASSWORD: '${NEXUS_PASSWORD}'
+      USERNAME: '${NEXUS_USERNAME}'
     type: Opaque
   - apiVersion: v1
     kind: BuildConfig
@@ -70,7 +79,13 @@ objects:
                   def configMap="${CONFIG_MAP_EAP}"
                   def version=""
                   def secretDb="${PIPELINE_NAME}-db-secret"
-
+                  def now = new Date()
+                  def current = now.format("yyMMdd.HHmm", TimeZone.getTimeZone('Asia/Bangkok'))
+                  def secretNexus="${PIPELINE_NAME}-nexus-perben"
+                  def saktiUiNexusURL = "${SAKTI_UI_NEXUS_URL}"
+                  def saktiEarNexusURL = "${SAKTI_EAP_NEXUS_URL}"
+                  def projectJasper = "${JASPER_NAMESPACE}"
+                  def jasperAppName = "${JASPER_APP_NAME}"
 
                   properties([
                     pipelineTriggers([
@@ -103,14 +118,19 @@ objects:
                     //    sh "mvn sonar:sonar -Dsonar.host.url=${sonarqube} -Dsonar.login=${sonarqubeToken} -Dsonar.projectName=${PIPELINE_NAME} -DskipTests=true"
                     // } 
                     stage("Build the Source") {
-                      //sh "mvn clean install -DskipTests=true"
                       sh "mvn -e -Popenshift install -DskipTests=true -Dcom.redhat.xpaas.repo.redhatga --batch-mode -Djava.net.preferIPv4Stack=true -Dcom.redhat.xpaas.repo.jbossorg"
                       sh "rm -rf oc-build && mkdir -p oc-build/deployments"
-                      //sh "cp target/*.jar oc-build/deployments/"
                       sh "cp deployments/*.ear oc-build/deployments"
-                      //sh "find sakti-ear/*/target -name '*.ear' -exec cp -t oc-build/deployments {} +"
                       sh "cp -r configuration oc-build/configuration || true"
                       sh "cp -r modules oc-build/modules || true"
+
+                      sh "mkdir -p sakti-ui-${version.toUpperCase()}-${current}/lib"
+                      sh "mkdir -p sakti-ui-${version.toUpperCase()}-${current}/conf"
+                      sh "cp sakti-ui/sakti-ui-main/src/main/conf/logback.xml sakti-ui-${version.toUpperCase()}-${current}/conf"
+                      sh "cp sakti-ui/sakti-ui-main/SpanCompressor.jar sakti-ui-${version.toUpperCase()}-${current}"
+                      sh "zip -d sakti-ui/sakti-ui-main/target/sakti-ui-main*.jar jaxws.properties"
+                      sh "cp sakti-ui/sakti-ui-main/target/sakti-ui-main*.jar sakti-ui-${version.toUpperCase()}-${current}"
+                      sh "cp sakti-ui/sakti-ui-main/target/lib/*.jar sakti-ui-${version.toUpperCase()}-${current}/lib"
                     }
                     stage("Build Image") {
                       sh "oc project ${projectTarget}"
@@ -177,9 +197,11 @@ objects:
                           def password=readFile('password.secret')
                           def username=readFile('username.secret')
                           def hostname=readFile('hostname.secret')
-                          //sh "rm -f *.secret"
-                          sh "oc create secret generic ${appName}-${version}-db --from-literal=USERNAME=${username} --from-literal=PASSWORD=${password} --from-literal=HOSTNAME=${hostname} -n ${projectTarget}"
-                          sh "oc label secret/${appName}-${version}-db app=${appName} -n ${projectTarget}"
+                          sh "rm -f *.secret"
+                          //sh "oc create secret generic ${appName}-${version}-db --from-literal=USERNAME=${username} --from-literal=PASSWORD=${password} --from-literal=HOSTNAME=${hostname} -n ${projectTarget}"
+                          sh "oc create secret generic ${appName}-db --from-literal=USERNAME=${username} --from-literal=PASSWORD=${password} --from-literal=HOSTNAME=${hostname} -n ${projectTarget}"
+                          //sh "oc label secret/${appName}-${version}-db app=${appName} -n ${projectTarget}"
+                          sh "oc label secret/${appName}-db app=${appName} -n ${projectTarget}"
                         }
                       }
                     }
@@ -193,9 +215,11 @@ objects:
                       }
 
                       if (dcNotPresent){
-                        sh "oc tag ${projectTarget}/${appName}:${version} ${projectTarget}/${appName}:deploy-${version}"
+                        //sh "oc tag ${projectTarget}/${appName}:${version} ${projectTarget}/${appName}:deploy-${version}"
+                        sh "oc tag ${projectTarget}/${appName}:${version} ${projectTarget}/${appName}:latest"
                         //sh "oc new-app --docker-image=docker-registry.default.svc:5000/${projectTarget}/${appName}:deploy-${version} --name=${appName}-${version} -n ${projectTarget} || true"
-                        sh "oc new-app --docker-image=docker-registry.default.svc:5000/${projectTarget}/${appName}:deploy-${version} --name=${appName} -n ${projectTarget} || true"
+                        //sh "oc new-app --docker-image=docker-registry.default.svc:5000/${projectTarget}/${appName}:${version} --name=${appName} -n ${projectTarget} || true"
+                        sh "oc new-app --docker-image=docker-registry.default.svc:5000/${projectTarget}/${appName}:latest --name=${appName} -n ${projectTarget} || true"
                         //sh "oc rollout cancel dc/${appName}-${version} -n ${projectTarget} || true"
                         sh "oc rollout cancel dc/${appName} -n ${projectTarget} || true"
                         //sh "oc rollout pause dc/${appName}-${version} -n ${projectTarget} || true"  
@@ -208,7 +232,7 @@ objects:
                         }
                         if (secretDb !=  ""){
                           //sh "oc set env --from=secret/${appName}-${version}-db --prefix=EXTERNAL_DATABASE_ dc/${appName}-${version} -n ${projectTarget}"
-                          sh "oc set env --from=secret/${appName}-${version}-db --prefix=EXTERNAL_DATABASE_ dc/${appName} -n ${projectTarget}"
+                          sh "oc set env --from=secret/${appName}-db --prefix=EXTERNAL_DATABASE_ dc/${appName} -n ${projectTarget}"
                         }
                         //apply timezone
                         //sh "oc set env dc/${appName}-${version} TZ=Asia/Bangkok -n ${projectTarget}"
@@ -222,34 +246,55 @@ objects:
                         //sh "oc expose svc ${appName}-${version} -n ${projectTarget}"
                         sh "oc expose svc ${appName} -n ${projectTarget} || true"
                         
+                        sh "oc get route/${appName} -o jsonpath='{.spec.host}' -n ${projectTarget} > ext.temp"
+                        def ext=readFile("ext.temp")
+                        sh "oc set env dc/${appName} EXTERNAL_ROUTE_NAME=${ext} -n ${projectTarget}"
+                        
                       }else{
                         //sh "oc rollout pause dc/${appName}-${version} -n ${projectTarget}"
                         sh "oc rollout pause dc/${appName} -n ${projectTarget}"  
-                        sh "oc tag ${projectTarget}/${appName}:${version} ${projectTarget}/${appName}:deploy-${version}"
+                        //sh "oc tag ${projectTarget}/${appName}:${version} ${projectTarget}/${appName}:deploy-${version}"
+                        sh "oc tag ${projectTarget}/${appName}:${version} ${projectTarget}/${appName}:latest"
                         //sh "oc rollout resume dc/${appName}-${version} -n ${projectTarget}"
                         sh "oc rollout resume dc/${appName} -n ${projectTarget}"  
                         //sh "oc rollout status dc/${appName}-${version} -w -n ${projectTarget}"
                         sh "oc rollout status dc/${appName} -w -n ${projectTarget}"
                         echo "just update the image"
                       }
-                      def secretVersionDeployNotPresent = false
-                      try {
-                        sh "oc get secret ${appName}-deploy-${version}-db -o jsonpath='{.metadata.name}' -n ${projectTarget}"
-                      }catch(err){
-                        secretVersionDeployNotPresent = true
-                      }
-                      if (secretVersionDeployNotPresent){
-                          //copying secret db
-                          sh "oc get secret ${secretDb} -n ${projectCicd} -o template --template='{{.data.PASSWORD}}'|base64 -d|tr -d '\n' > password.secret"
-                          sh "oc get secret ${secretDb} -n ${projectCicd} -o template --template='{{.data.USERNAME}}'|base64 -d|tr -d '\n' > username.secret"
-                          sh "oc get secret ${secretDb} -n ${projectCicd} -o template --template='{{.data.HOSTNAME}}'|base64 -d|tr -d '\n' > hostname.secret"
-                          def password=readFile('password.secret')
-                          def username=readFile('username.secret')
-                          def hostname=readFile('hostname.secret')
-                          sh "rm -f *.secret"
-                          sh "oc create secret generic ${appName}-deploy-${version}-db --from-literal=USERNAME=${username} --from-literal=PASSWORD=${password} --from-literal=HOSTNAME=${hostname} -n ${projectTarget}"
-                          sh "oc label secret/${appName}-deploy-${version}-db app=${appName} -n ${projectTarget}"
-                      }
+                    }
+                    stage("Deploying to nexus") {
+                        sh "oc get route/${appName} -o jsonpath='{.spec.host}' -n ${projectTarget} > route.temp"
+                        def route=readFile('route.temp')
+                        sh "echo 'jaxws.endpoint.address=http\\://${route}' > sakti-ui-${version.toUpperCase()}-${current}/conf/jaxws.properties"
+                        
+                        sh "oc get route/${jasperAppName} -o jsonpath='{.spec.host}' -n ${projectJasper} > routeJasper.temp"
+                        def routeJasper=readFile('routeJasper.temp')
+                        sh "echo 'jasperreport.url=http\\://${routeJasper}/jasperserver/services/repository' > sakti-ui-${version.toUpperCase()}-${current}/sakti2-config.properties"
+                        
+                        sh "echo 'jasperreport.userName=jasperadmin' >> sakti-ui-${version.toUpperCase()}-${current}/sakti2-config.properties"
+                        sh "echo 'jasperreport.password=jasperadmin' >> sakti-ui-${version.toUpperCase()}-${current}/sakti2-config.properties"
+                        sh "echo 'sftp.isLocal=false' >> sakti-ui-${version.toUpperCase()}-${current}/sakti2-config.properties"
+                        sh "echo 'sftp.directory=/home/spanftp2/sakti_app/adk' >> sakti-ui-${version.toUpperCase()}-${current}/sakti2-config.properties"
+                        sh "echo 'sftp.password=spanftp2' >> sakti-ui-${version.toUpperCase()}-${current}/sakti2-config.properties"
+                        sh "echo 'sftp.userName=spanftp2' >> sakti-ui-${version.toUpperCase()}-${current}/sakti2-config.properties"
+                        sh "echo 'sftp.url=10.242.143.72' >> sakti-ui-${version.toUpperCase()}-${current}/sakti2-config.properties"
+                        sh "echo 'sftp.port=22' >> sakti-ui-${version.toUpperCase()}-${current}/sakti2-config.properties"
+                        sh "echo 'database.type=oracle' >> sakti-ui-${version.toUpperCase()}-${current}/sakti2-config.properties"
+
+                        sh "ls -ltr sakti-ui-${version.toUpperCase()}-${current} | grep 'sakti-ui-main.*\\.jar\$' | awk '{print \$9}' > filename.temp"
+                        def filename=readFile('filename.temp')
+
+                        sh "rm -f *.temp"
+                        sh "echo 'java -DsuppressSwingDropSupport=true -Xmx1024m -Xms1024m -XX:PermSize=512m -Duser.timezone=Asia/Jakarta -jar ${filename}' > sakti-ui-${version.toUpperCase()}-${current}/runsakti.sh"
+                        sh "echo 'java -DsuppressSwingDropSupport=true -Xmx1024m -Xms1024m -XX:PermSize=512m -Duser.timezone=Asia/Jakarta -jar ${filename}' > sakti-ui-${version.toUpperCase()}-${current}/runsakti.bat"
+                        sh "zip -r sakti-ear-${version.toUpperCase()}-${current}.zip deployments"
+                        sh "zip -r sakti-ui-${version.toUpperCase()}-${current}.zip sakti-ui-${version.toUpperCase()}-${current}"
+                        sh "oc get secret ${secretNexus} -n ${projectCicd} -o template --template='{{.data.USERNAME}}'|base64 -d|tr -d '\n' > user.secret"
+                        sh "oc get secret ${secretNexus} -n ${projectCicd} -o template --template='{{.data.PASSWORD}}'|base64 -d|tr -d '\n' > pass.secret"
+                        def user=readFile('user.secret')
+                        def pass=readFile('pass.secret')
+                        sh "curl -v -u ${user}:${pass} --upload-file sakti-ui-${version.toUpperCase()}-${current}.zip ${saktiUiNexusURL}"
+                        sh "curl -v -u ${user}:${pass} --upload-file sakti-ear-${version.toUpperCase()}-${current}.zip ${saktiEarNexusURL}"
                     }
                   }
               }
@@ -292,6 +337,14 @@ parameters:
     displayName: Database Password
     name: DB_PASSWORD
     required: true
+  - description: The namespace/project of which jasperserver application is assigned.
+    displayName: JasperServer Application Namespace/Project
+    name: JASPER_NAMESPACE
+    required: true
+  - description: The name of jasperserver application in jasperserver namespace/project
+    displayName: JasperServer Application Name
+    name: JASPER_APP_NAME
+    required: true
   - description: The URL of the repository with your application source code.
     displayName: Git Repository URL
     name: SOURCE_REPOSITORY_URL
@@ -305,9 +358,30 @@ parameters:
     name: SOURCE_REPOSITORY_CREDENTIAL_SECRET
     required: true
     value: gitlab-perben
-  - description: The configmap name that need to load as environment variable.
+  - description: >-
+      The configmap name from this namespace that need to load to assigend
+      namespace as environment variable.
     displayName: Config Map EAP
     name: CONFIG_MAP_EAP
+    required: true
+  - description: The username of nexus defined in this template.
+    displayName: Nexus Username
+    name: NEXUS_USERNAME
+    required: true
+    value: admin
+  - description: The password of nexus defined in this template.
+    displayName: Nexus Password
+    name: NEXUS_PASSWORD
+    required: true
+    value: admin123
+  - description: URL to deploy sakti ear to nexus
+    displayName: Sakti EAR Nexus Url
+    name: SAKTI_EAP_NEXUS_URL
+    required: true
+  - description: URL to deploy sakti ui to nexus
+    displayName: Sakti UI Nexus Url
+    name: SAKTI_UI_NEXUS_URL
+    required: true
   - description: The OpenShift Namespace where the jenkins running.
     displayName: Namespace CICD
     name: NAMESPACE_CICD

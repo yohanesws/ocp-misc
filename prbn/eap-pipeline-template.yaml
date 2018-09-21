@@ -1,96 +1,54 @@
-apiVersion: v1
+apiVersion: template.openshift.io/v1
 kind: Template
 labels:
   template: eap-pipeline-template
-message: |-
+message: >-
   A Jenkins server will be automatically instantiated in this project to manage
-  the Pipeline BuildConfig created by this template.  You will be able to log in to
+
+  the Pipeline BuildConfig created by this template.  You will be able to log in
+  to
+
   it using your OpenShift user credentials.
 metadata:
   annotations:
-    openshift.io/display-name: EAP Pipeline Generic
-    description: |-
-      This template showcases the new Jenkins Pipeline integration for spring boot in OpenShift,
-      which performs continuous integration and deployment right on the platform.
-      The template contains a Jenkinsfile - a definition of a multi-stage CI/CD process - that
+    description: >-
+      This template showcases the new Jenkins Pipeline integration for spring
+      boot in OpenShift,
+
+      which performs continuous integration and deployment right on the
+      platform.
+
+      The template contains a Jenkinsfile - a definition of a multi-stage CI/CD
+      process - that
+
       leverages the underlying OpenShift platform for dynamic and scalable
-      builds. OpenShift integrates the status of your pipeline builds into the web
-      console allowing you to see your entire application lifecycle in a single view.
+
+      builds. OpenShift integrates the status of your pipeline builds into the
+      web
+
+      console allowing you to see your entire application lifecycle in a single
+      view.
     iconClass: icon-jenkins
-    tags: instant-app,eap,jenkins
+    openshift.io/display-name: EAP Pipeline Generic
+    tags: 'instant-app,eap,jenkins'
+  creationTimestamp: '2018-08-28T07:08:20Z'
   name: eap-pipeline-template
-parameters:
-- description: The name assigned to pipeline defined in this template.
-  displayName: Pipeline Name
-  name: PIPELINE_NAME
-  required: true
-- description: The name assigned to application defined in this template.
-  displayName: Application Name
-  name: APP_NAME
-  required: true
-- description: The namespace/project of which the application is assigned.
-  displayName: Application Namespace/Project
-  name: APP_NAMESPACE
-  required: true
-- description: The URL of the repository with your application source code.
-  displayName: Git Repository URL
-  name: SOURCE_REPOSITORY_URL
-  required: true
-- description: The Branch of the repository with your application source code.
-  displayName: Git Repository Branch
-  name: SOURCE_REPOSITORY_BRANCH
-  required: true
-- description: Git Credential Secret.
-  displayName: Git Secret Credential
-  name: SOURCE_REPOSITORY_CREDENTIAL_SECRET
-  required: true
-  value: gitlab-perben
-- description: The configmap name that need to load as environment variable.
-  displayName: Config Map EAP
-  name: CONFIG_MAP_EAP
-- description: The OpenShift Namespace where the jenkins running.
-  displayName: Namespace CICD
-  name: NAMESPACE_CICD
-  required: true
-  value: devops
-- description: The OpenShift Namespace where the builder ImageStreams reside.
-  displayName: Namespace Builder
-  name: NAMESPACE_BUILDER
-  required: true
-  value: openshift
-- description: The name of OpenJDK builder ImageStreams to used.
-  displayName: EAP Builder
-  name: IMAGE_BUILDER
-  value: "jboss-eap71-openshift"
-  required: true
-- description: The version of OpenJDK builder ImageStreams to used.
-  displayName: Version Builder
-  name: IMAGE_VERSION
-  required: true
-  value: "1.3"
-- description: Github trigger secret.  A difficult to guess string encoded as part of the webhook URL.  Not encrypted.
-  displayName: GitHub Webhook Secret
-  from: '[a-zA-Z0-9]{40}'
-  generate: expression
-  name: GITHUB_WEBHOOK_SECRET
-  required: true
-- description: A secret string used to configure the Generic webhook.
-  displayName: Generic Webhook Secret
-  from: '[a-zA-Z0-9]{40}'
-  generate: expression
-  name: GENERIC_WEBHOOK_SECRET
-  required: true
+  namespace: openshift
+  resourceVersion: '3968800'
+  selfLink: >-
+    /apis/template.openshift.io/v1/namespaces/openshift/templates/eap-pipeline-template
+  uid: 25465c92-aa91-11e8-ae55-001a4a160110
 objects:
-- apiVersion: v1
-  kind: BuildConfig
-  metadata:
-    labels:
-      name: ${PIPELINE_NAME}
-    name: ${PIPELINE_NAME}
-  spec:
-    strategy:
-      jenkinsPipelineStrategy:
-        jenkinsfile: |-
+  - apiVersion: v1
+    kind: BuildConfig
+    metadata:
+      labels:
+        name: '${PIPELINE_NAME}'
+      name: '${PIPELINE_NAME}'
+    spec:
+      strategy:
+        jenkinsPipelineStrategy:
+          jenkinsfile: |-
             try {
                 timeout(time: 20, unit: 'MINUTES') {
                   def appName="${APP_NAME}"
@@ -122,6 +80,8 @@ objects:
                       version=pom.version
                       if (version == "")
                         version="latest"
+                      
+                      version = version.toLowerCase()
                       echo "version : ${version}"
                     }
                     stage ("Unit Test"){
@@ -132,9 +92,9 @@ objects:
                     //    sh "mvn sonar:sonar -Dsonar.host.url=${sonarqube} -Dsonar.login=${sonarqubeToken} -Dsonar.projectName=${PIPELINE_NAME} -DskipTests=true"
                     // } 
                     stage("Build the Source") {
-                      sh "mvn clean install -DskipTests=true"
+                      sh "mvn install -DskipTests=true"
                       sh "rm -rf oc-build && mkdir -p oc-build/deployments"
-                      sh "cp target/*.jar oc-build/deployments/"
+                      sh "cp deployments/*.ear oc-build/deployments"
                       sh "cp -r configuration oc-build/configuration || true"
                       sh "cp -r modules oc-build/modules || true"
                     }
@@ -146,7 +106,7 @@ objects:
                       sh "oc start-build ${appName} -n ${projectTarget} --from-dir=oc-build --follow --wait"
                       sh "oc tag ${projectTarget}/${appName}:latest ${projectTarget}/${appName}:${version}"
                     }
-                    // stage ("Configuring") {
+                    stage ("Configuring") {
                     //  def cmNotPresent = false
                     //  try {
                     //    sh "oc get cm ${appName}-${version}-cm -o jsonpath='{.metadata.name}' -n ${projectTarget}"
@@ -163,7 +123,32 @@ objects:
                     //  sh "oc create cm ${appName}-${version}-cm --from-file=files-config/ -n ${projectTarget}"
                     //  sh "oc label cm/${appName}-${version}-cm app=${appName}-${version} -n ${projectTarget}"
                     //  }
-                    // }
+                    
+                      if(configMap != ""){
+                        def cmNotPresent = false
+                        try {
+                          sh "oc get cm ${configMap} -o jsonpath='{.metadata.name}' -n ${projectTarget}"
+                        } catch(err) {
+                          cmNotPresent = true
+                        }
+                        if (cmNotPresent){
+                          sh "oc get cm ${configMap} -n devops -o template --template='{{.data.AUTO_DEPLOY_EXPLODED}}'|tr -d '\n' > auto_deploy_exploded.cm"
+                          sh "oc get cm ${configMap} -n devops -o template --template='{{.data.CONTAINER_HEAP_PERCENT}}'|tr -d '\n' > container_heap_percent.cm"
+                          sh "oc get cm ${configMap} -n devops -o template --template='{{.data.INITIAL_HEAP_PERCENT}}'|tr -d '\n' > initial_heap_percent.cm"
+                          sh "oc get cm ${configMap} -n devops -o template --template='{{.data.JAVA_OPTS_APPEND}}'|tr -d '\n' > java_opts_append.cm"
+                          
+                          def autoDeployExploded=readFile('auto_deploy_exploded.cm')
+                          def containerHeapPercent=readFile('container_heap_percent.cm')
+                          def initialHeapPercent=readFile('initial_heap_percent.cm')
+                          def javaOptsAppend=readFile('java_opts_append.cm')
+                          
+                          sh "rm -f *.cm"
+                          sh "oc create configmap ${configMap} --from-literal=AUTO_DEPLOY_EXPLODED='${autoDeployExploded}' --from-literal=CONTAINER_HEAP_PERCENT='${containerHeapPercent}' --from-literal=INITIAL_HEAP_PERCENT='${initialHeapPercent}' --from-literal=JAVA_OPTS_APPEND='${javaOptsAppend}' -n ${projectTarget}"
+                          sh "oc label configmap/${configMap} app=${appName} -n ${projectTarget}"
+                          
+                        }
+                      }
+                    }
                     stage("Deploying") {
                       def dcNotPresent = false
                       try {
@@ -174,26 +159,38 @@ objects:
 
                       if (dcNotPresent){
                         sh "oc tag ${projectTarget}/${appName}:${version} ${projectTarget}/${appName}:deploy-${version}"
-                        sh "oc new-app --docker-image=docker-registry.default.svc:5000/${projectTarget}/${appName}:deploy-${version} --name=${appName}-${version} -n ${projectTarget} || true"
-                        sh "oc rollout cancel dc/${appName}-${version} -n ${projectTarget} || true"deploy
-                        sh "oc rollout pause dc/${appName}-${version} -n ${projectTarget}"  
+                        //sh "oc new-app --docker-image=docker-registry.default.svc:5000/${projectTarget}/${appName}:deploy-${version} --name=${appName}-${version} -n ${projectTarget} || true"
+                        sh "oc new-app --docker-image=docker-registry.default.svc:5000/${projectTarget}/${appName}:deploy-${version} --name=${appName} -n ${projectTarget} || true"
+                        //sh "oc rollout cancel dc/${appName}-${version} -n ${projectTarget} || true"
+                        sh "oc rollout cancel dc/${appName} -n ${projectTarget} || true"
+                        //sh "oc rollout pause dc/${appName}-${version} -n ${projectTarget}"  
+                        sh "oc rollout pause dc/${appName} -n ${projectTarget}"  
+                        
                         // sh "oc set volume dc/${appName}-${version} -n ${projectTarget} --add --name=config-volume -t configmap --configmap-name=${appName}-${version}-cm --mount-path=/deployments/config || true"
                         if (configMap !=  ""){
-                          sh "oc set env --from=configmap/${configMap} dc/${appName}-${version} -n ${projectTarget}"
+                          //sh "oc set env --from=configmap/${configMap} dc/${appName}-${version} -n ${projectTarget}"
+                          sh "oc set env --from=configmap/${configMap} dc/${appName} -n ${projectTarget}"
                         }
                         //apply timezone
-                        sh "oc set env dc/${appName}-${version} TZ=Asia/Bangkok -n ${projectTarget}"
+                        //sh "oc set env dc/${appName}-${version} TZ=Asia/Bangkok -n ${projectTarget}"
+                        sh "oc set env dc/${appName} TZ=Asia/Bangkok -n ${projectTarget}"
 
-                        sh "oc rollout resume dc/${appName}-${version} -n ${projectTarget}"  
-                        sh "oc rollout status dc/${appName}-${version} -w -n ${projectTarget}"
+                        //sh "oc rollout resume dc/${appName}-${version} -n ${projectTarget}"
+                        sh "oc rollout resume dc/${appName} -n ${projectTarget}"  
+                        //sh "oc rollout status dc/${appName}-${version} -w -n ${projectTarget}"
+                        sh "oc rollout status dc/${appName} -w -n ${projectTarget}"
 
-                        sh "oc expose svc ${appName}-${version} -n ${projectTarget}"
+                        //sh "oc expose svc ${appName}-${version} -n ${projectTarget}"
+                        sh "oc expose svc ${appName} -n ${projectTarget} || true"
                         
                       }else{
-                        sh "oc rollout pause dc/${appName}-${version} -n ${projectTarget}"  
+                        //sh "oc rollout pause dc/${appName}-${version} -n ${projectTarget}"
+                        sh "oc rollout pause dc/${appName} -n ${projectTarget}"  
                         sh "oc tag ${projectTarget}/${appName}:${version} ${projectTarget}/${appName}:deploy-${version}"
-                        sh "oc rollout resume dc/${appName}-${version} -n ${projectTarget}"  
-                        sh "oc rollout status dc/${appName}-${version} -w -n ${projectTarget}"
+                        //sh "oc rollout resume dc/${appName}-${version} -n ${projectTarget}"
+                        sh "oc rollout resume dc/${appName} -n ${projectTarget}"  
+                        //sh "oc rollout status dc/${appName}-${version} -w -n ${projectTarget}"
+                        sh "oc rollout status dc/${appName} -w -n ${projectTarget}"
                         echo "just update the image"
                       }
                     }
@@ -205,11 +202,74 @@ objects:
                 currentBuild.result = 'FAILURE'
                 throw err
             } // JenkinsPipeline
-      type: JenkinsPipeline
-    triggers:
-    - github:
-        secret: ${GITHUB_WEBHOOK_SECRET}
-      type: GitHub
-    - generic:
-        secret: ${GENERIC_WEBHOOK_SECRET}
-      type: Generic
+        type: JenkinsPipeline
+      triggers:
+        - github:
+            secret: '${GITHUB_WEBHOOK_SECRET}'
+          type: GitHub
+        - generic:
+            secret: '${GENERIC_WEBHOOK_SECRET}'
+          type: Generic
+parameters:
+  - description: The name assigned to pipeline defined in this template.
+    displayName: Pipeline Name
+    name: PIPELINE_NAME
+    required: true
+  - description: The name assigned to application defined in this template.
+    displayName: Application Name
+    name: APP_NAME
+    required: true
+  - description: The namespace/project of which the application is assigned.
+    displayName: Application Namespace/Project
+    name: APP_NAMESPACE
+    required: true
+  - description: The URL of the repository with your application source code.
+    displayName: Git Repository URL
+    name: SOURCE_REPOSITORY_URL
+    required: true
+  - description: The Branch of the repository with your application source code.
+    displayName: Git Repository Branch
+    name: SOURCE_REPOSITORY_BRANCH
+    required: true
+  - description: Git Credential Secret.
+    displayName: Git Secret Credential
+    name: SOURCE_REPOSITORY_CREDENTIAL_SECRET
+    required: true
+    value: gitlab-perben
+  - description: The configmap name that need to load as environment variable.
+    displayName: Config Map EAP
+    name: CONFIG_MAP_EAP
+  - description: The OpenShift Namespace where the jenkins running.
+    displayName: Namespace CICD
+    name: NAMESPACE_CICD
+    required: true
+    value: devops
+  - description: The OpenShift Namespace where the builder ImageStreams reside.
+    displayName: Namespace Builder
+    name: NAMESPACE_BUILDER
+    required: true
+    value: openshift
+  - description: The name of OpenJDK builder ImageStreams to used.
+    displayName: EAP Builder
+    name: IMAGE_BUILDER
+    required: true
+    value: jboss-eap71-openshift
+  - description: The version of OpenJDK builder ImageStreams to used.
+    displayName: Version Builder
+    name: IMAGE_VERSION
+    required: true
+    value: '1.3'
+  - description: >-
+      Github trigger secret.  A difficult to guess string encoded as part of the
+      webhook URL.  Not encrypted.
+    displayName: GitHub Webhook Secret
+    from: '[a-zA-Z0-9]{40}'
+    generate: expression
+    name: GITHUB_WEBHOOK_SECRET
+    required: true
+  - description: A secret string used to configure the Generic webhook.
+    displayName: Generic Webhook Secret
+    from: '[a-zA-Z0-9]{40}'
+    generate: expression
+    name: GENERIC_WEBHOOK_SECRET
+    required: true
