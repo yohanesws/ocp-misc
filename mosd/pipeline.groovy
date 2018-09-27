@@ -55,7 +55,7 @@ try {
             }
         }
         stage("Migrate DB SIT") {
-            sh "oc get pod -o jsonpath='{.items[*].metadata.name}' -l deploymentconfig=${databaseSvc} -n ${projectSit} > mysqlpod"
+            sh "oc get pod -o jsonpath='{.items[?(@.status.phase == \"Running\")].metadata.name}' -l deploymentconfig=${databaseSvc} -n ${projectSit} > mysqlpod"
             mysqlpod = readFile('mysqlpod').trim()
             sh "oc exec -n ${projectSit} ${mysqlpod} -- bash -c 'mysqldump -uroot -p7cjD6vqf2QurcVHV -hmysql.myprestasi-dev.svc myprestasi|mysql -umyprestasi -pqFTdxArxPkgfe6HC myprestasi'"
         }
