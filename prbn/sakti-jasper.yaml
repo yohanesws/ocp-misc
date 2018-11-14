@@ -1,0 +1,250 @@
+apiVersion: v1
+kind: Template
+metadata:
+  creationTimestamp: null
+  name: sakti-jasper
+objects:
+- apiVersion: v1
+  kind: Service
+  metadata:
+    annotations:
+      openshift.io/generated-by: OpenShiftWebConsole
+    creationTimestamp: null
+    labels:
+      app: sakti-jasper
+    name: sakti-jasper
+  spec:
+    ports:
+    - name: 8080-tcp
+      port: 8080
+      protocol: TCP
+      targetPort: 8080
+    selector:
+      deploymentconfig: sakti-jasper
+    sessionAffinity: None
+    type: ClusterIP
+  status:
+    loadBalancer: {}
+- apiVersion: v1
+  kind: ServiceAccount
+  metadata:
+    creationTimestamp: null
+    name: builder
+- apiVersion: v1
+  kind: ServiceAccount
+  metadata:
+    creationTimestamp: null
+    name: default
+- apiVersion: v1
+  kind: ServiceAccount
+  metadata:
+    creationTimestamp: null
+    name: deployer
+- apiVersion: v1
+  kind: ServiceAccount
+  metadata:
+    creationTimestamp: null
+    name: jasper
+- apiVersion: v1
+  data:
+    default_master.properties: |-
+      ################################################################################
+      #                                                                              #
+      # Master Properties File                                                       #
+      #                                                                              #
+      # Standard usage is to rename this file to default_master.properties.          #
+      # It should be placed in the root of the buildomatic directory, like:          #
+      #                                                                              #
+      #     <js-install>/buildomatic/default_master.properties                       #
+      #                                                                              #
+      # There is one sample property file for each database type. Sample property    #
+      # files are found in:                                                          #
+      #                                                                              #
+      #     <js-install>/buildomatic/sample_conf                                     #
+      #                                                                              #
+      ################################################################################
+
+      ################################################################################
+      #                                                                              #
+      # Installation Settings                                                        #
+      #                                                                              #
+      # Set values for:                                                              #
+      #                                                                              #
+      #   1) Application server type                                                 #
+      #                                                                              #
+      #   2) Path to application server home directory                               #
+      #                                                                              #
+      #   3) Database location and connection settings                               #
+      #                                                                              #
+      ################################################################################
+
+      # application server type (default is tomcat6)
+
+      # appServerType = tomcat6
+      # appServerType = tomcat5
+      # appServerType = jboss
+      # appServerType = glassfish2
+      # appServerType = glassfish3
+      # (beta) appServerType = weblogic
+      # (beta) appServerType = websphere
+      appServerType = skipAppServerCheck
+
+      # Tomcat app server root dir
+      appServerDir=/home/jasper/jasper-server/apache-tomcat
+
+      #appServerDir = c:\\apache-tomcat-6.0.26
+      # appServerDir = /home/devuser/apache-tomcat-6.0.26
+      # appServerDir = /var/lib/tomcat6
+
+      # JBoss app server root dir
+      # appServerDir = c:\\jboss-5.1.0
+      # appServerDir = /home/devuser/jboss-5.1.0
+      # appServerDir = /usr/bin/jboss
+
+      # Glassfish app server root dir
+      # appServerDir = c:\\glassfish-2.1
+      # appServerDir = /home/devuser/glassfish-2.1
+      # appServerDir = /usr/bin/glassfish
+
+      # database type
+      dbType=postgresql
+
+      # database location and connection settings
+
+      dbHost=10.242.99.42
+      dbUsername=postgres
+      dbPassword=postgres
+
+
+      # additional database parameters
+      # (uncomment these if you want non-default settings)
+
+      dbPort=5432
+
+      # JasperServer db name, sample db names
+       js.dbName=jasper_eut
+      # sugarcrm.dbName=sugarcrm
+      # foodmart.dbName=foodmart
+
+      # web app name
+      # (set one of these to deploy to a non-default war file name)
+      # webAppNameCE = jasperserver
+      # webAppNamePro = jasperserver-pro
+
+      #
+      # JDBC driver version
+      # (uncomment to change to a non-default setting)
+      #
+      # maven.jdbc.artifactId=postgresql
+      # maven.jdbc.version=9.0-801.jdbc3
+  kind: ConfigMap
+  metadata:
+    creationTimestamp: null
+    name: jasper-conf
+- apiVersion: v1
+  kind: Route
+  metadata:
+    annotations:
+      openshift.io/host.generated: "true"
+    creationTimestamp: null
+    labels:
+      app: sakti-jasper
+    name: sakti-jasper
+  spec:
+    host: sakti-jasper-sakti-eut.ocpprddjpb.kemenkeu.go.id
+    port:
+      targetPort: 8080-tcp
+    to:
+      kind: Service
+      name: sakti-jasper
+      weight: 100
+    wildcardPolicy: None
+  status:
+    ingress:
+    - conditions:
+      - lastTransitionTime: 2018-11-14T02:57:51Z
+        status: "True"
+        type: Admitted
+      host: sakti-jasper-sakti-eut.ocpprddjpb.kemenkeu.go.id
+      routerName: router
+      wildcardPolicy: None
+- apiVersion: v1
+  kind: DeploymentConfig
+  metadata:
+    annotations:
+      openshift.io/generated-by: OpenShiftWebConsole
+    creationTimestamp: null
+    generation: 8
+    labels:
+      app: sakti-jasper
+    name: sakti-jasper
+  spec:
+    replicas: 1
+    selector:
+      app: sakti-jasper
+      deploymentconfig: sakti-jasper
+    strategy:
+      activeDeadlineSeconds: 21600
+      resources: {}
+      rollingParams:
+        intervalSeconds: 1
+        maxSurge: 25%
+        maxUnavailable: 25%
+        timeoutSeconds: 600
+        updatePeriodSeconds: 1
+      type: Rolling
+    template:
+      metadata:
+        annotations:
+          openshift.io/generated-by: OpenShiftWebConsole
+        creationTimestamp: null
+        labels:
+          app: sakti-jasper
+          deploymentconfig: sakti-jasper
+      spec:
+        containers:
+        - image: docker-registry.default.svc:5000/openshift/sakti-jasper@sha256:d8af21781e5507505bc470e954274625eea6272ab5517f74ab3a570b18350fca
+          imagePullPolicy: Always
+          name: sakti-jasper
+          ports:
+          - containerPort: 8080
+            protocol: TCP
+          resources: {}
+          terminationMessagePath: /dev/termination-log
+          terminationMessagePolicy: File
+          volumeMounts:
+          - mountPath: /home/jasper/jasper-server/buildomatic/default_master.properties
+            name: config-volume
+            subPath: default_master.properties
+        dnsPolicy: ClusterFirst
+        restartPolicy: Always
+        schedulerName: default-scheduler
+        securityContext: {}
+        serviceAccount: jasper
+        serviceAccountName: jasper
+        terminationGracePeriodSeconds: 30
+        volumes:
+        - configMap:
+            defaultMode: 420
+            name: jasper-conf
+          name: config-volume
+    test: false
+    triggers:
+    - type: ConfigChange
+    - imageChangeParams:
+        automatic: true
+        containerNames:
+        - sakti-jasper
+        from:
+          kind: ImageStreamTag
+          name: sakti-jasper:latest
+          namespace: openshift
+        lastTriggeredImage: docker-registry.default.svc:5000/openshift/sakti-jasper@sha256:d8af21781e5507505bc470e954274625eea6272ab5517f74ab3a570b18350fca
+      type: ImageChange
+  status:
+    availableReplicas: 0
+    latestVersion: 0
+    observedGeneration: 0
+    replicas: 0
+    unavailableReplicas: 0
+    updatedReplicas: 0

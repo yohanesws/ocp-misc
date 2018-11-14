@@ -34,7 +34,7 @@ metadata:
   creationTimestamp: '2018-09-07T08:28:35Z'
   name: sakti-pipeline-with-db-template
   namespace: openshift
-  resourceVersion: '6238416'
+  resourceVersion: '13203513'
   selfLink: >-
     /apis/template.openshift.io/v1/namespaces/openshift/templates/sakti-pipeline-with-db-template
   uid: 033f0308-b278-11e8-9edd-001a4a160110
@@ -86,6 +86,8 @@ objects:
                   def saktiEarNexusURL = "${SAKTI_EAP_NEXUS_URL}"
                   def projectJasper = "${JASPER_NAMESPACE}"
                   def jasperAppName = "${JASPER_APP_NAME}"
+                  def user
+                  def pass
 
                   properties([
                     pipelineTriggers([
@@ -118,7 +120,13 @@ objects:
                     //    sh "mvn sonar:sonar -Dsonar.host.url=${sonarqube} -Dsonar.login=${sonarqubeToken} -Dsonar.projectName=${PIPELINE_NAME} -DskipTests=true"
                     // } 
                     stage("Build the Source") {
-                      sh "mvn -e -Popenshift install -DskipTests=true -Dcom.redhat.xpaas.repo.redhatga --batch-mode -Djava.net.preferIPv4Stack=true -Dcom.redhat.xpaas.repo.jbossorg"
+                      sh "oc get secret ${secretNexus} -n ${projectCicd} -o template --template='{{.data.USERNAME}}'|base64 -d|tr -d '\n' > user.secret"
+                      sh "oc get secret ${secretNexus} -n ${projectCicd} -o template --template='{{.data.PASSWORD}}'|base64 -d|tr -d '\n' > pass.secret"
+                      user=readFile('user.secret')
+                      pass=readFile('pass.secret')
+                      //sh "mvn -e -Popenshift clean install deploy -DskipTests=true -Dcom.redhat.xpaas.repo.redhatga --batch-mode -Djava.net.preferIPv4Stack=true -Dcom.redhat.xpaas.repo.jbossorg -DaltDeploymentRepository=nexus::default::http://${user}:${pass}@${saktiEarNexusURL}"
+                      sh "mvn -e -Popenshift clean install -DskipTests=true -Dcom.redhat.xpaas.repo.redhatga --batch-mode -Djava.net.preferIPv4Stack=true -Dcom.redhat.xpaas.repo.jbossorg"
+                      
                       sh "rm -rf oc-build && mkdir -p oc-build/deployments"
                       sh "cp deployments/*.ear oc-build/deployments"
                       sh "cp -r configuration oc-build/configuration || true"
@@ -185,7 +193,7 @@ objects:
                      if (secretDb !=  ""){
                         def secretNotPresent = false
                         try {
-                          sh "oc get secret ${appName}-${version}-db -o jsonpath='{.metadata.name}' -n ${projectTarget}"
+                          sh "oc get secret ${appName}-db -o jsonpath='{.metadata.name}' -n ${projectTarget}"
                         }catch(err){
                           secretNotPresent = true
                         }
@@ -237,6 +245,14 @@ objects:
                         //apply timezone
                         //sh "oc set env dc/${appName}-${version} TZ=Asia/Bangkok -n ${projectTarget}"
                         sh "oc set env dc/${appName} TZ=Asia/Bangkok -n ${projectTarget}"
+                        
+                        //setting resources
+                        sh "oc set resources DeploymentConfig ${appName} -n ${projectTarget} -c ${appName} --requests='cpu=500m,memory=1024Mi' --limits='cpu=2000m,memory=6Gi' || true"
+                        sh "oc autoscale dc/${appName} -n ${projectTarget} --min 1 --max 6 --cpu-percent=75 || true"
+                        
+                        //setting healthcheck
+                        sh "oc set probe dc/${appName} -n ${projectTarget} --initial-delay-seconds=10 --timeout-seconds=1 --readiness -- /bin/bash -c /opt/eap/bin/readinessProbe.sh"
+                        sh "oc set probe dc/${appName} -n ${projectTarget} --initial-delay-seconds=90 --timeout-seconds=1 --liveness -- /bin/bash -c /opt/eap/bin/livenessProbe.sh"
 
                         //sh "oc rollout resume dc/${appName}-${version} -n ${projectTarget}"
                         sh "oc rollout resume dc/${appName} -n ${projectTarget}"  
@@ -249,6 +265,8 @@ objects:
                         sh "oc get route/${appName} -o jsonpath='{.spec.host}' -n ${projectTarget} > ext.temp"
                         def ext=readFile("ext.temp")
                         sh "oc set env dc/${appName} EXTERNAL_ROUTE_NAME=${ext} -n ${projectTarget}"
+                        //increase time out
+                        sh "oc annotate route/${appName} -n ${projectTarget} --overwrite haproxy.router.openshift.io/timeout=240000ms"
                         
                       }else{
                         //sh "oc rollout pause dc/${appName}-${version} -n ${projectTarget}"
@@ -256,9 +274,15 @@ objects:
                         //sh "oc tag ${projectTarget}/${appName}:${version} ${projectTarget}/${appName}:deploy-${version}"
                         sh "oc tag ${projectTarget}/${appName}:${version} ${projectTarget}/${appName}:latest"
                         //sh "oc rollout resume dc/${appName}-${version} -n ${projectTarget}"
+                        
+                        //setting healthcheck
+                        sh "oc set probe dc/${appName} -n ${projectTarget} --initial-delay-seconds=10 --timeout-seconds=1 --readiness -- /bin/bash -c /opt/eap/bin/readinessProbe.sh"
+                        sh "oc set probe dc/${appName} -n ${projectTarget} --initial-delay-seconds=90 --timeout-seconds=1 --liveness -- /bin/bash -c /opt/eap/bin/livenessProbe.sh"
+                        
                         sh "oc rollout resume dc/${appName} -n ${projectTarget}"  
                         //sh "oc rollout status dc/${appName}-${version} -w -n ${projectTarget}"
                         sh "oc rollout status dc/${appName} -w -n ${projectTarget}"
+
                         echo "just update the image"
                       }
                     }
@@ -277,7 +301,8 @@ objects:
                         sh "echo 'sftp.directory=/home/spanftp2/sakti_app/adk' >> sakti-ui-${version.toUpperCase()}-${current}/sakti2-config.properties"
                         sh "echo 'sftp.password=spanftp2' >> sakti-ui-${version.toUpperCase()}-${current}/sakti2-config.properties"
                         sh "echo 'sftp.userName=spanftp2' >> sakti-ui-${version.toUpperCase()}-${current}/sakti2-config.properties"
-                        sh "echo 'sftp.url=10.242.143.72' >> sakti-ui-${version.toUpperCase()}-${current}/sakti2-config.properties"
+                        //sftp url changes
+                        sh "echo 'sftp.url=10.100.88.41' >> sakti-ui-${version.toUpperCase()}-${current}/sakti2-config.properties"
                         sh "echo 'sftp.port=22' >> sakti-ui-${version.toUpperCase()}-${current}/sakti2-config.properties"
                         sh "echo 'database.type=oracle' >> sakti-ui-${version.toUpperCase()}-${current}/sakti2-config.properties"
 
@@ -285,14 +310,10 @@ objects:
                         def filename=readFile('filename.temp')
 
                         sh "rm -f *.temp"
-                        sh "echo 'java -DsuppressSwingDropSupport=true -Xmx1024m -Xms1024m -XX:PermSize=512m -Duser.timezone=Asia/Jakarta -jar ${filename}' > sakti-ui-${version.toUpperCase()}-${current}/runsakti.sh"
-                        sh "echo 'java -DsuppressSwingDropSupport=true -Xmx1024m -Xms1024m -XX:PermSize=512m -Duser.timezone=Asia/Jakarta -jar ${filename}' > sakti-ui-${version.toUpperCase()}-${current}/runsakti.bat"
+                        sh "echo 'java -DsuppressSwingDropSupport=true -Dsun.java2d.dpiaware=false -Xmx1024m -Xms1024m -XX:PermSize=512m -Duser.timezone=Asia/Jakarta -jar ${filename}' > sakti-ui-${version.toUpperCase()}-${current}/runsakti.sh"
+                        sh "echo 'java -DsuppressSwingDropSupport=true -Dsun.java2d.dpiaware=false -Xmx1024m -Xms1024m -XX:PermSize=512m -Duser.timezone=Asia/Jakarta -jar ${filename}' > sakti-ui-${version.toUpperCase()}-${current}/runsakti.bat"
                         sh "zip -r sakti-ear-${version.toUpperCase()}-${current}.zip deployments"
                         sh "zip -r sakti-ui-${version.toUpperCase()}-${current}.zip sakti-ui-${version.toUpperCase()}-${current}"
-                        sh "oc get secret ${secretNexus} -n ${projectCicd} -o template --template='{{.data.USERNAME}}'|base64 -d|tr -d '\n' > user.secret"
-                        sh "oc get secret ${secretNexus} -n ${projectCicd} -o template --template='{{.data.PASSWORD}}'|base64 -d|tr -d '\n' > pass.secret"
-                        def user=readFile('user.secret')
-                        def pass=readFile('pass.secret')
                         sh "curl -v -u ${user}:${pass} --upload-file sakti-ui-${version.toUpperCase()}-${current}.zip ${saktiUiNexusURL}"
                         sh "curl -v -u ${user}:${pass} --upload-file sakti-ear-${version.toUpperCase()}-${current}.zip ${saktiEarNexusURL}"
                     }

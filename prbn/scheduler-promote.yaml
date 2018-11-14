@@ -1,0 +1,419 @@
+apiVersion: template.openshift.io/v1
+kind: Template
+labels:
+  template: scheduler-promote
+message: >-
+  A Jenkins server will be automatically instantiated in this project to manage
+
+  the Pipeline BuildConfig created by this template.  You will be able to log in
+  to
+
+  it using your OpenShift user credentials.
+metadata:
+  annotations:
+    description: >-
+      This template showcases the new Jenkins Pipeline integration for spring
+      boot in OpenShift,
+
+      which performs continuous integration and deployment right on the
+      platform.
+
+      The template contains a Jenkinsfile - a definition of a multi-stage CI/CD
+      process - that
+
+      leverages the underlying OpenShift platform for dynamic and scalable
+
+      builds. OpenShift integrates the status of your pipeline builds into the
+      web
+
+      console allowing you to see your entire application lifecycle in a single
+      view.
+    iconClass: icon-jenkins
+    openshift.io/display-name: Sakti Scheduler Deploy Pipeline
+    tags: 'instant-app,promote,jenkins'
+  creationTimestamp: '2018-09-07T09:33:30Z'
+  name: scheduler-promote
+  namespace: openshift
+  resourceVersion: '13204442'
+  selfLink: >-
+    /apis/template.openshift.io/v1/namespaces/openshift/templates/sakti-promote-pipeline-prod-with-db-template
+  uid: 14f0dfaf-b281-11e8-9edd-001a4a160110
+parameters:
+  - description: The name assigned to pipeline defined in this template.
+    displayName: Pipeline Name
+    name: PIPELINE_NAME
+    required: true
+  - description: The name assigned to application defined in this template.
+    displayName: Application Name
+    name: APP_NAME
+    required: true
+    value: sakti-scheduler
+  - description: The name of source of application
+    displayName: Source Application Name
+    name: SOURCE_APP_NAME
+    required: true
+    value: sakti-app
+  - description: The namespace/project of which the application is running now.
+    displayName: Source Application Namespace/Project
+    name: SOURCE_APP_NAMESPACE
+    required: true
+    value: 'sakti-dev'
+  - description: The namespace/project of which the application is move to.
+    displayName: Destinatition Application Namespace/Project
+    name: DEST_APP_NAMESPACE
+    required: true
+    value: 'scheduler'
+  - description: >-
+      The configmap name from source namespace that need to load as environment
+      variable.
+    displayName: Config Map EAP
+    name: CONFIG_MAP_EAP
+    required: true
+    value: 'sakti-configmap'
+  - description: The database Hostname of database defined in this template
+    displayName: Database Name
+    name: DB_HOST
+    required: true
+    value: 'jdbc:oracle:thin:@//kpbsdcexa-scan.kemenkeu.go.id:1521/xsakti.kemenkeu.go.id'
+  - description: The username of database defined in this template.
+    displayName: Database Username
+    name: DB_USERNAME
+    required: true
+    value: 'sakti_app'
+  - description: The password of database defined in this template.
+    displayName: Database Password
+    name: DB_PASSWORD
+    required: true
+  - description: The database Hostname of database defined in this template
+    displayName: Database Name
+    name: DB_DR_HOST
+    required: true
+    value: 'jdbc:oracle:thin:@//kpbsdrexa-scan.kemenkeu.go.id:1521/xsakti.kemenkeu.go.id'
+  - description: The username of database defined in this template.
+    displayName: Database Username
+    name: DB_DR_USERNAME
+    required: true
+    value: 'sakti_app'
+  - description: The password of database defined in this template.
+    displayName: Database Password
+    name: DB_DR_PASSWORD
+    required: true
+  - description: >-
+      The namespace/project of which jasperserver application is assigned in
+      Production.
+    displayName: JasperServer Application Namespace/Project
+    name: JASPER_NAMESPACE
+    required: true
+    value: 'sakti-prod'
+  - description: >-
+      The name of jasperserver application in jasperserver namespace/project in
+      Production
+    displayName: JasperServer Application Name
+    name: JASPER_APP_NAME
+    required: true
+    value: 'sakti-prod-jasper'
+  - description: >-
+      The secrey name from source namespace that need to load as environment
+      variable.
+    displayName: Secret EAP
+    name: SECRET_EAP
+    required: true
+    value: 'sakti-prod-dr-promote-db-secret'
+  - description: >-
+      The secrey name from source namespace that need to load as environment
+      variable.
+    displayName: Secret EAP DR
+    name: SECRET_EAP_DR
+    required: true
+    value: 'sakti-prod-dr-promote-db-dr-secret'
+  - description: The OpenShift Namespace where the jenkins running.
+    displayName: Namespace CICD
+    name: NAMESPACE_CICD
+    required: true
+    value: devops
+  - description: >-
+      Github trigger secret.  A difficult to guess string encoded as part of the
+      webhook URL.  Not encrypted.
+    displayName: GitHub Webhook Secret
+    from: '[a-zA-Z0-9]{40}'
+    generate: expression
+    name: GITHUB_WEBHOOK_SECRET
+    required: true
+  - description: A secret string used to configure the Generic webhook.
+    displayName: Generic Webhook Secret
+    from: '[a-zA-Z0-9]{40}'
+    generate: expression
+    name: GENERIC_WEBHOOK_SECRET
+    required: true
+objects:
+  - apiVersion: v1
+    kind: Secret
+    labels:
+      credential.sync.jenkins.openshift.io: true
+    metadata:
+      name: '${PIPELINE_NAME}-dest-cluster-secret'
+      namespace: '${NAMESPACE_CICD}'
+    type: kubernetes.io/basic-auth 
+    stringData: 
+      password: '${DEST_CLUSTER_TOKEN}'
+      username: unused
+    type: Opaque
+  - apiVersion: v1
+    kind: Secret
+    labels:
+      credential.sync.jenkins.openshift.io: true
+    metadata:
+      name: '${PIPELINE_NAME}-dest-dr-cluster-secret'
+      namespace: '${NAMESPACE_CICD}'
+    type: kubernetes.io/basic-auth 
+    stringData: 
+      password: '${DEST_DR_CLUSTER_TOKEN}'
+      username: unused
+    type: Opaque
+  - apiVersion: v1
+    kind: Secret
+    metadata:
+      name: '${PIPELINE_NAME}-db-eut'
+      namespace: '${NAMESPACE_CICD}'
+    stringData:
+      HOSTNAME: '${DB_HOST}'
+      PASSWORD: '${DB_PASSWORD}'
+      USERNAME: '${DB_USERNAME}'
+    type: Opaque
+  - apiVersion: v1
+    kind: Secret
+    metadata:
+      name: '${PIPELINE_NAME}-db-dr-eut'
+      namespace: '${NAMESPACE_CICD}'
+    stringData:
+      HOSTNAME: '${DB_DR_HOST}'
+      PASSWORD: '${DB_DR_PASSWORD}'
+      USERNAME: '${DB_DR_USERNAME}'
+    type: Opaque
+  - apiVersion: v1
+    kind: BuildConfig
+    metadata:
+      labels:
+        credential.sync.jenkins.openshift.io: 'true'
+        name: '${PIPELINE_NAME}'
+      name: '${PIPELINE_NAME}'
+    spec:
+      strategy:
+        jenkinsPipelineStrategy:
+          jenkinsfile: |-
+            try {
+                timeout(time: 20, unit: 'MINUTES') {
+                  def appName="${APP_NAME}"
+                  def sourceAppName="${SOURCE_APP_NAME}"
+                  def projectTarget="${DEST_APP_NAMESPACE}"
+                  def projectSource="${SOURCE_APP_NAMESPACE}"
+                  def configMap="${CONFIG_MAP_EAP}"
+                  def secretDb="${SECRET_EAP}"
+                  def secretDbDr="${SECRET_EAP_DR}"
+                  def ocpDest="${DEST_CLUSTER_URL}"
+                  def ocpDrDest="${DEST_CLUSTER_DR_URL}"
+                  def namespaceCICD="${NAMESPACE_CICD}"
+                  def now = new Date()
+                  def current = now.format("yyyyMMdd.HHmm", TimeZone.getTimeZone('Asia/Bangkok'))
+                  def localToken =""
+
+                  node ('maven') {
+                    stage("Preparing"){
+                      timeout (time:10, unit: 'MINUTES'){
+                        input message : "promote scheduler from  namespace: ${SOURCE_APP_NAMESPACE} to namespace: ${DEST_APP_NAMESPACE}", ok:"Promote"
+                      }
+                      sh "rm -f sakti.properties"
+                      sh "echo 'RUN_TUTUP_BUKU_OTOMATIS=true' >> sakti.properties"
+                      sh "echo 'RUN_NORMALISASI_JURNAL=true' >> sakti.properties"
+                      sh "echo 'RUN_SSB=true' >> sakti.properties"
+                      sh "oc label secret ${PIPELINE_NAME}-dest-cluster-secret -n ${namespaceCICD} credential.sync.jenkins.openshift.io=true || true"
+                      sh "oc label secret ${PIPELINE_NAME}-dest-dr-cluster-secret -n ${namespaceCICD} credential.sync.jenkins.openshift.io=true || true"
+                    }
+                    stage ("Configuring") {
+                      withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: '${NAMESPACE_CICD}-${PIPELINE_NAME}-dest-cluster-secret', passwordVariable: 'DEST_TOKEN', usernameVariable: 'UNUSED']]){
+                        sh "oc login ${ocpDest} --token=${DEST_TOKEN} --insecure-skip-tls-verify=true"
+                      }
+                      if (configMap!=""){
+                         sh "oc export cm/${configMap} -n ${projectSource} >  cm-staging.yml"
+                      }
+
+                      if (secretDb!=""){
+                         sh "oc export secret/${secretDb} -n ${projectSource} >  secret-staging.yml"
+                      }
+                      
+                      if (configMap!=""){
+                         sh "oc create -f cm-staging.yml -n ${projectTarget} || true"
+                      }
+                      if (secretDb!=""){
+                         sh "oc create -f  secret-staging.yml -n ${projectTarget} || true"
+                      }
+                      //create sakti.properties configmaps
+                      sh "oc create configmap scheduler-config-file --from-file=sakti.properties -n ${projectTarget} || true"
+                    }
+                    stage("Deploying") {
+                      def dcNotPresent = false
+                      try {
+                        sh "oc get dc ${appName} -o jsonpath='{.metadata.name}' -n ${projectTarget}"
+                      }catch(err){
+                        dcNotPresent = true
+                      }
+
+                      if (dcNotPresent){
+                        sh "oc tag ${projectSource}/${sourceAppName}:latest ${projectTarget}/${appName}:latest"
+                        sh "oc new-app ${appName}:latest --name=${appName} -n ${projectTarget} || true"
+                        sh "oc rollout cancel dc/${appName} -n ${projectTarget} || true"
+                        sh "oc rollout pause dc/${appName} -n ${projectTarget}"  
+                        //mounting the configmaps
+                        sh "oc set volume dc/${appName} -n ${projectTarget} --add --overwrite --name=config-scheduler-volume -t configmap --configmap-name=scheduler-config-file --mount-path=/opt/eap/standalone/configuration/sakti.properties --sub-path=sakti.properties || true"
+                        if (configMap !=  ""){
+                          sh "oc set env --from=configmap/${configMap} dc/${appName} -n ${projectTarget}"
+                        }
+                        if (secretDb !=  ""){
+                          sh "oc set env --from=secret/${secretDb} --prefix=EXTERNAL_DATABASE_ dc/${appName} -n ${projectTarget}"
+                        }
+                        //apply timezone
+                        sh "oc set env dc/${appName} TZ=Asia/Bangkok -n ${projectTarget}"
+                        
+                        //setting resources and autoscale
+                        sh "oc set resources DeploymentConfig ${appName} -n ${projectTarget} -c ${appName} --requests='cpu=500m,memory=1024Mi' --limits='cpu=2000m,memory=6Gi'"
+                        
+                        //setting healthcheck
+                        sh "oc set probe dc/${appName} -n ${projectTarget} --initial-delay-seconds=10 --timeout-seconds=1 --readiness -- /bin/bash -c /opt/eap/bin/readinessProbe.sh"
+                        sh "oc set probe dc/${appName} -n ${projectTarget} --initial-delay-seconds=90 --timeout-seconds=1 --liveness -- /bin/bash -c /opt/eap/bin/livenessProbe.sh"
+                        
+                        sh "oc rollout resume dc/${appName} -n ${projectTarget}"  
+                        sh "oc rollout status dc/${appName} -w -n ${projectTarget}"
+
+                        //sh "oc expose svc ${appName} -n ${projectTarget}"
+                        sh "oc expose svc ${appName} -n ${projectTarget} || true"
+
+                        sh "oc get route/${appName} -o jsonpath='{.spec.host}' -n ${projectTarget} > ext.temp"
+                        def ext=readFile("ext.temp")
+                        sh "oc set env dc/${appName} EXTERNAL_ROUTE_NAME=${ext} -n ${projectTarget}"
+                        //increase time out
+                        sh "oc annotate route/${appName} -n ${projectTarget} --overwrite haproxy.router.openshift.io/timeout=240000ms"
+                        
+                      }else{
+                        sh "oc rollout pause dc/${appName} -n ${projectTarget}"  
+                        sh "oc tag ${projectSource}/${sourceAppName}:latest ${projectTarget}/${appName}:latest"
+                        
+                        //setting healthcheck
+                        sh "oc set probe dc/${appName} -n ${projectTarget} --initial-delay-seconds=10 --timeout-seconds=1 --readiness -- /bin/bash -c /opt/eap/bin/readinessProbe.sh"
+                        sh "oc set probe dc/${appName} -n ${projectTarget} --initial-delay-seconds=90 --timeout-seconds=1 --liveness -- /bin/bash -c /opt/eap/bin/livenessProbe.sh"
+                        
+                        sh "oc rollout resume dc/${appName} -n ${projectTarget}"  
+                        sh "oc rollout status dc/${appName} -w -n ${projectTarget}"
+                        echo "just update the image"
+                      }
+                    }
+                    stage ("Configuring DR") {
+                      withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: '${NAMESPACE_CICD}-${PIPELINE_NAME}-dest-dr-cluster-secret', passwordVariable: 'DEST_TOKEN', usernameVariable: 'UNUSED']]){
+                        sh "oc login ${ocpDrDest} --token=${DEST_TOKEN} --insecure-skip-tls-verify=true"
+                      }
+
+                      if (configMap!=""){
+                         sh "oc export cm/${configMap} -n ${projectSource} >  cm-staging.yml"
+                      }
+
+                      if (secretDbDr!=""){
+                         sh "oc export secret/${secretDbDr} -n ${projectSource} >  secret-staging.yml"
+                      }
+                      
+                      if (configMap!=""){
+                         sh "oc create -f cm-staging.yml -n ${projectTarget} || true"
+                      }
+                      if (secretDbDr!=""){
+                         sh "oc create -f  secret-staging.yml -n ${projectTarget} || true"
+                      }
+                      //create sakti.properties configmaps
+                      sh "oc create configmap scheduler-config-file --from-file=sakti.properties -n ${projectTarget} || true"
+                    }
+                    stage("Deploying DR") {
+                      def dcNotPresent = false
+                      try {
+                        sh "oc get dc ${appName} -o jsonpath='{.metadata.name}' -n ${projectTarget}"
+                      }catch(err){
+                        dcNotPresent = true
+                      }
+
+                      if (dcNotPresent){
+                        sh "oc tag ${projectSource}/${sourceAppName}:latest ${projectTarget}/${appName}:latest"
+                        sh "oc new-app ${appName}:latest --name=${appName} -n ${projectTarget} || true"
+                        sh "oc rollout cancel dc/${appName} -n ${projectTarget} || true"
+                        sh "oc rollout pause dc/${appName} -n ${projectTarget}"  
+                        sh "oc set volume dc/${appName} -n ${projectTarget} --add --overwrite --name=config-scheduler-volume -t configmap --configmap-name=scheduler-config-file --mount-path=/opt/eap/standalone/configuration/sakti.properties --sub-path=sakti.properties || true"
+                        if (configMap !=  ""){
+                          sh "oc set env --from=configmap/${configMap} dc/${appName} -n ${projectTarget}"
+                        }
+                        if (secretDbDr !=  ""){
+                          sh "oc set env --from=secret/${secretDbDr} --prefix=EXTERNAL_DATABASE_ dc/${appName} -n ${projectTarget}"
+                        }
+                        //apply timezone
+                        sh "oc set env dc/${appName} TZ=Asia/Bangkok -n ${projectTarget}"
+                        
+                        //setting resources and autoscale
+                        sh "oc set resources DeploymentConfig ${appName} -n ${projectTarget} -c ${appName} --requests='cpu=500m,memory=1024Mi' --limits='cpu=2000m,memory=6Gi'"
+                        
+                        //setting healthcheck
+                        sh "oc set probe dc/${appName} -n ${projectTarget} --initial-delay-seconds=10 --timeout-seconds=1 --readiness -- /bin/bash -c /opt/eap/bin/readinessProbe.sh"
+                        sh "oc set probe dc/${appName} -n ${projectTarget} --initial-delay-seconds=90 --timeout-seconds=1 --liveness -- /bin/bash -c /opt/eap/bin/livenessProbe.sh"
+                        
+                        //sh "oc expose svc ${appName} -n ${projectTarget}"
+                        sh "oc expose svc ${appName} -n ${projectTarget} || true"
+                        
+                        sh "oc get route/${appName} -o jsonpath='{.spec.host}' -n ${projectTarget} > ext.temp"
+                        def ext=readFile("ext.temp")
+                        sh "oc set env dc/${appName} EXTERNAL_ROUTE_NAME=${ext} -n ${projectTarget}"
+                        //increase time out
+                        sh "oc annotate route/${appName} -n ${projectTarget} --overwrite haproxy.router.openshift.io/timeout=240000ms"
+
+                        sh "oc rollout resume dc/${appName} -n ${projectTarget}"  
+                        sh "oc rollout status dc/${appName} -w -n ${projectTarget}"
+                        
+                      }else{
+                        sh "oc rollout pause dc/${appName} -n ${projectTarget}"  
+                        sh "oc tag ${projectSource}/${sourceAppName}:latest ${projectTarget}/${appName}:latest"
+                        
+                        //setting healthcheck
+                        sh "oc set probe dc/${appName} -n ${projectTarget} --initial-delay-seconds=10 --timeout-seconds=1 --readiness -- /bin/bash -c /opt/eap/bin/readinessProbe.sh"
+                        sh "oc set probe dc/${appName} -n ${projectTarget} --initial-delay-seconds=90 --timeout-seconds=1 --liveness -- /bin/bash -c /opt/eap/bin/livenessProbe.sh"
+                        
+                        sh "oc rollout resume dc/${appName} -n ${projectTarget}"  
+                        sh "oc rollout status dc/${appName} -w -n ${projectTarget}"
+                        echo "just update the image"
+                      }
+                      //scale down the scheduler at dr
+                      sh "oc scale dc/${appName} --replicas=0 -n ${projectTarget} ||true"
+                    }
+                  }
+              }
+            } catch (err) {
+                echo "in catch block"
+                echo "Caught: ${err}"
+                currentBuild.result = 'FAILURE'
+                throw err
+            } // JenkinsPipeline
+            @NonCPS
+            Map extractFunction(def file) {
+                try {
+                    def response = new XmlSlurper().parseText(file)
+                    def size = response.data.'content-item'.size()-1
+                    def downloadURL = response.data.'content-item'[size].resourceURI.text()
+                    def fileName = response.data.'content-item'[size].text.text()
+                    return [url:downloadURL, filename:fileName]
+                } catch (Exception e) {
+                    echo "in catch block"
+                    echo "Caught: ${e}"
+                    currentBuild.result = 'FAILURE'
+                    throw e
+                }
+            }
+        type: JenkinsPipeline
+      triggers:
+        - github:
+            secret: '${GITHUB_WEBHOOK_SECRET}'
+          type: GitHub
+        - generic:
+            secret: '${GENERIC_WEBHOOK_SECRET}'
+          type: Generic
+

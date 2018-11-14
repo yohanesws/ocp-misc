@@ -1,7 +1,7 @@
 apiVersion: template.openshift.io/v1
 kind: Template
 labels:
-  template: sakti-promote-pipeline-prod-with-db-template
+  template: sakti-promote-pipeline-prod-and-dr-with-db-template
 message: >-
   A Jenkins server will be automatically instantiated in this project to manage
 
@@ -29,15 +29,15 @@ metadata:
       console allowing you to see your entire application lifecycle in a single
       view.
     iconClass: icon-jenkins
-    openshift.io/display-name: Sakti Promote UAT to PROD Pipeline
+    openshift.io/display-name: Sakti Promote UAT to PROD and DR Pipeline
     tags: 'instant-app,promote,jenkins'
-  creationTimestamp: '2018-09-07T09:33:30Z'
-  name: sakti-promote-pipeline-prod-with-db-template
+  creationTimestamp: '2018-10-05T03:40:46Z'
+  name: sakti-promote-pipeline-prod-and-dr-with-db-template
   namespace: openshift
-  resourceVersion: '13204442'
+  resourceVersion: '13204771'
   selfLink: >-
-    /apis/template.openshift.io/v1/namespaces/openshift/templates/sakti-promote-pipeline-prod-with-db-template
-  uid: 14f0dfaf-b281-11e8-9edd-001a4a160110
+    /apis/template.openshift.io/v1/namespaces/openshift/templates/sakti-promote-pipeline-prod-and-dr-with-db-template
+  uid: 718b6265-c850-11e8-a43d-001a4a160110
 objects:
   - apiVersion: v1
     kind: Secret
@@ -48,6 +48,16 @@ objects:
       namespace: '${NAMESPACE_CICD}'
     stringData:
       secrettext: '${DEST_CLUSTER_TOKEN}'
+    type: Opaque
+  - apiVersion: v1
+    kind: Secret
+    labels:
+      credential.sync.jenkins.openshift.io: true
+    metadata:
+      name: '${PIPELINE_NAME}-dr-cluster-secret'
+      namespace: '${NAMESPACE_CICD}'
+    stringData:
+      secrettext: '${DR_CLUSTER_TOKEN}'
     type: Opaque
   - apiVersion: v1
     kind: Secret
@@ -79,6 +89,7 @@ objects:
                   def secretDb="${PIPELINE_NAME}-db-secret"
                   def version=""
                   def extRegistry="${DEST_REPO}"
+                  def drRegistry="${DR_REPO}"
                   def ocpDest="${DEST_CLUSTER_URL}"
                   def namespaceCICD="${NAMESPACE_CICD}"
                   def now = new Date()
@@ -122,6 +133,22 @@ objects:
                           --src-creds openshift:${localToken} --src-cert-dir=/run/secrets/kubernetes.io/serviceaccount/ \
                           --dest-creds openshift:${DEST_TOKEN}  --dest-tls-verify=false \
                           docker://${imageRegistry}:${version} docker://${extRegistry}/${projectTarget}/${appName}:${version}
+                        """
+                      }
+                      //Move image to DR
+                      withCredentials([string(credentialsId: '${PIPELINE_NAME}-dr-cluster-secret', variable: 'DR_TOKEN')]) {
+                        def localToken = readFile('/var/run/secrets/kubernetes.io/serviceaccount/token').trim()
+                        
+                        sh "oc get is/${appName} -n ${projectSource} -o template --template='{{.status.dockerImageRepository}}'| tr -d '\n' > internalRepo"
+                        def imageRegistry = readFile('internalRepo')
+
+                        echo "Promoting ${imageRegistry}:${version} -> ${drRegistry}/${projectTarget}/${appName}"
+                        sh """
+                        set +x
+                        skopeo copy --remove-signatures \
+                          --src-creds openshift:${localToken} --src-cert-dir=/run/secrets/kubernetes.io/serviceaccount/ \
+                          --dest-creds openshift:${DR_TOKEN}  --dest-tls-verify=false \
+                          docker://${imageRegistry}:${version} docker://${drRegistry}/${projectTarget}/${appName}:${version}
                         """
                       }
                     }
@@ -322,6 +349,15 @@ parameters:
     name: DEST_CLUSTER_URL
     required: true
     value: 'kpbsdc-prdocpmaster.kemenkeu.go.id:8443'
+  - description: The token credential for login to dr cluster
+    displayName: DR Token
+    name: DR_CLUSTER_TOKEN
+    required: true
+  - description: DR Repository Address.
+    displayName: DR Repository
+    name: DR_REPO
+    required: true
+    value: docker-registry-default.ocpprddjpb.kemenkeu.go.id
   - description: >-
       The configmap name from source namespace that need to load as environment
       variable.

@@ -34,7 +34,7 @@ metadata:
   creationTimestamp: '2018-09-07T09:04:54Z'
   name: sakti-promote-pipeline-with-db-template
   namespace: openshift
-  resourceVersion: '4787095'
+  resourceVersion: '13204273'
   selfLink: >-
     /apis/template.openshift.io/v1/namespaces/openshift/templates/sakti-promote-pipeline-with-db-template
   uid: 15edc82d-b27d-11e8-9edd-001a4a160110
@@ -138,6 +138,14 @@ objects:
                         //sh "oc set env dc/${appName}-${version} TZ=Asia/Bangkok -n ${projectTarget}"
                         sh "oc set env dc/${appName} TZ=Asia/Bangkok -n ${projectTarget}"
 
+                        //setting resources
+                        sh "oc set resources DeploymentConfig ${appName} -n ${projectTarget} -c ${appName} --requests='cpu=500m,memory=1024Mi' --limits='cpu=2000m,memory=6Gi' || true"
+                        sh "oc autoscale dc/${appName} -n ${projectTarget} --min 1 --max 6 --cpu-percent=75 || true"
+                        
+                        //setting healthcheck
+                        sh "oc set probe dc/${appName} -n ${projectTarget} --initial-delay-seconds=10 --timeout-seconds=1 --readiness -- /bin/bash -c /opt/eap/bin/readinessProbe.sh"
+                        sh "oc set probe dc/${appName} -n ${projectTarget} --initial-delay-seconds=90 --timeout-seconds=1 --liveness -- /bin/bash -c /opt/eap/bin/livenessProbe.sh"
+                        
                         //sh "oc rollout resume dc/${appName}-${version} -n ${projectTarget}"
                         sh "oc rollout resume dc/${appName} -n ${projectTarget}"  
                         //sh "oc rollout status dc/${appName}-${version} -w -n ${projectTarget}"
@@ -149,12 +157,18 @@ objects:
                         sh "oc get route/${appName} -o jsonpath='{.spec.host}' -n ${projectTarget} > ext.temp"
                         def ext=readFile("ext.temp")
                         sh "oc set env dc/${appName} EXTERNAL_ROUTE_NAME=${ext} -n ${projectTarget}"
-                        
+                        //increase time out
+                        sh "oc annotate route/${appName} -n ${projectTarget} --overwrite haproxy.router.openshift.io/timeout=240000ms"
                       }else{
                         //sh "oc rollout pause dc/${appName}-${version} -n ${projectTarget}"
                         sh "oc rollout pause dc/${appName} -n ${projectTarget}"  
                         //sh "oc tag ${projectTarget}/${appName}:${version} ${projectTarget}/${appName}:deploy-${version}"
                         sh "oc tag ${projectTarget}/${appName}:${version} ${projectTarget}/${appName}:latest"
+                        
+                        //setting healthcheck
+                        sh "oc set probe dc/${appName} -n ${projectTarget} --initial-delay-seconds=10 --timeout-seconds=1 --readiness -- /bin/bash -c /opt/eap/bin/readinessProbe.sh"
+                        sh "oc set probe dc/${appName} -n ${projectTarget} --initial-delay-seconds=90 --timeout-seconds=1 --liveness -- /bin/bash -c /opt/eap/bin/livenessProbe.sh"
+                        
                         //sh "oc rollout resume dc/${appName}-${version} -n ${projectTarget}"
                         sh "oc rollout resume dc/${appName} -n ${projectTarget}"  
                         //sh "oc rollout status dc/${appName}-${version} -w -n ${projectTarget}"
@@ -201,7 +215,8 @@ objects:
                         sh "echo 'sftp.directory=/home/spanftp2/sakti_app/adk' >> ${fileWithoutExt}/sakti2-config.properties"
                         sh "echo 'sftp.password=spanftp2' >> ${fileWithoutExt}/sakti2-config.properties"
                         sh "echo 'sftp.userName=spanftp2' >> ${fileWithoutExt}/sakti2-config.properties"
-                        sh "echo 'sftp.url=10.242.143.72' >> ${fileWithoutExt}/sakti2-config.properties"
+                        //sftp url changes
+                        sh "echo 'sftp.url=10.100.88.41' >> ${fileWithoutExt}/sakti2-config.properties"
                         sh "echo 'sftp.port=22' >> ${fileWithoutExt}/sakti2-config.properties"
                         sh "echo 'database.type=oracle' >> ${fileWithoutExt}/sakti2-config.properties"
                         
