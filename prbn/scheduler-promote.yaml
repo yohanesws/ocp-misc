@@ -70,62 +70,13 @@ parameters:
     name: CONFIG_MAP_EAP
     required: true
     value: 'sakti-configmap'
-  - description: The database Hostname of database defined in this template
-    displayName: Database Name
-    name: DB_HOST
-    required: true
-    value: 'jdbc:oracle:thin:@//kpbsdcexa-scan.kemenkeu.go.id:1521/xsakti.kemenkeu.go.id'
-  - description: The username of database defined in this template.
-    displayName: Database Username
-    name: DB_USERNAME
-    required: true
-    value: 'sakti_app'
-  - description: The password of database defined in this template.
-    displayName: Database Password
-    name: DB_PASSWORD
-    required: true
-  - description: The database Hostname of database defined in this template
-    displayName: Database Name
-    name: DB_DR_HOST
-    required: true
-    value: 'jdbc:oracle:thin:@//kpbsdrexa-scan.kemenkeu.go.id:1521/xsakti.kemenkeu.go.id'
-  - description: The username of database defined in this template.
-    displayName: Database Username
-    name: DB_DR_USERNAME
-    required: true
-    value: 'sakti_app'
-  - description: The password of database defined in this template.
-    displayName: Database Password
-    name: DB_DR_PASSWORD
-    required: true
-  - description: >-
-      The namespace/project of which jasperserver application is assigned in
-      Production.
-    displayName: JasperServer Application Namespace/Project
-    name: JASPER_NAMESPACE
-    required: true
-    value: 'sakti-prod'
-  - description: >-
-      The name of jasperserver application in jasperserver namespace/project in
-      Production
-    displayName: JasperServer Application Name
-    name: JASPER_APP_NAME
-    required: true
-    value: 'sakti-prod-jasper'
   - description: >-
       The secrey name from source namespace that need to load as environment
       variable.
     displayName: Secret EAP
     name: SECRET_EAP
     required: true
-    value: 'sakti-prod-dr-promote-db-secret'
-  - description: >-
-      The secrey name from source namespace that need to load as environment
-      variable.
-    displayName: Secret EAP DR
-    name: SECRET_EAP_DR
-    required: true
-    value: 'sakti-prod-dr-promote-db-dr-secret'
+    value: 'sakti-app-db'
   - description: The OpenShift Namespace where the jenkins running.
     displayName: Namespace CICD
     name: NAMESPACE_CICD
@@ -147,50 +98,6 @@ parameters:
     required: true
 objects:
   - apiVersion: v1
-    kind: Secret
-    labels:
-      credential.sync.jenkins.openshift.io: true
-    metadata:
-      name: '${PIPELINE_NAME}-dest-cluster-secret'
-      namespace: '${NAMESPACE_CICD}'
-    type: kubernetes.io/basic-auth 
-    stringData: 
-      password: '${DEST_CLUSTER_TOKEN}'
-      username: unused
-    type: Opaque
-  - apiVersion: v1
-    kind: Secret
-    labels:
-      credential.sync.jenkins.openshift.io: true
-    metadata:
-      name: '${PIPELINE_NAME}-dest-dr-cluster-secret'
-      namespace: '${NAMESPACE_CICD}'
-    type: kubernetes.io/basic-auth 
-    stringData: 
-      password: '${DEST_DR_CLUSTER_TOKEN}'
-      username: unused
-    type: Opaque
-  - apiVersion: v1
-    kind: Secret
-    metadata:
-      name: '${PIPELINE_NAME}-db-eut'
-      namespace: '${NAMESPACE_CICD}'
-    stringData:
-      HOSTNAME: '${DB_HOST}'
-      PASSWORD: '${DB_PASSWORD}'
-      USERNAME: '${DB_USERNAME}'
-    type: Opaque
-  - apiVersion: v1
-    kind: Secret
-    metadata:
-      name: '${PIPELINE_NAME}-db-dr-eut'
-      namespace: '${NAMESPACE_CICD}'
-    stringData:
-      HOSTNAME: '${DB_DR_HOST}'
-      PASSWORD: '${DB_DR_PASSWORD}'
-      USERNAME: '${DB_DR_USERNAME}'
-    type: Opaque
-  - apiVersion: v1
     kind: BuildConfig
     metadata:
       labels:
@@ -209,15 +116,12 @@ objects:
                   def projectSource="${SOURCE_APP_NAMESPACE}"
                   def configMap="${CONFIG_MAP_EAP}"
                   def secretDb="${SECRET_EAP}"
-                  def secretDbDr="${SECRET_EAP_DR}"
-                  def ocpDest="${DEST_CLUSTER_URL}"
-                  def ocpDrDest="${DEST_CLUSTER_DR_URL}"
                   def namespaceCICD="${NAMESPACE_CICD}"
                   def now = new Date()
                   def current = now.format("yyyyMMdd.HHmm", TimeZone.getTimeZone('Asia/Bangkok'))
                   def localToken =""
 
-                  node ('maven') {
+                  node () {
                     stage("Preparing"){
                       timeout (time:10, unit: 'MINUTES'){
                         input message : "promote scheduler from  namespace: ${SOURCE_APP_NAMESPACE} to namespace: ${DEST_APP_NAMESPACE}", ok:"Promote"
@@ -226,26 +130,26 @@ objects:
                       sh "echo 'RUN_TUTUP_BUKU_OTOMATIS=true' >> sakti.properties"
                       sh "echo 'RUN_NORMALISASI_JURNAL=true' >> sakti.properties"
                       sh "echo 'RUN_SSB=true' >> sakti.properties"
-                      sh "oc label secret ${PIPELINE_NAME}-dest-cluster-secret -n ${namespaceCICD} credential.sync.jenkins.openshift.io=true || true"
-                      sh "oc label secret ${PIPELINE_NAME}-dest-dr-cluster-secret -n ${namespaceCICD} credential.sync.jenkins.openshift.io=true || true"
                     }
                     stage ("Configuring") {
-                      withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: '${NAMESPACE_CICD}-${PIPELINE_NAME}-dest-cluster-secret', passwordVariable: 'DEST_TOKEN', usernameVariable: 'UNUSED']]){
-                        sh "oc login ${ocpDest} --token=${DEST_TOKEN} --insecure-skip-tls-verify=true"
-                      }
+                      sh "oc policy add-role-to-user system:image-puller system:serviceaccount:${projectTarget}:default -n ${projectSource} || true"
+
                       if (configMap!=""){
                          sh "oc export cm/${configMap} -n ${projectSource} >  cm-staging.yml"
                       }
-
-                      if (secretDb!=""){
-                         sh "oc export secret/${secretDb} -n ${projectSource} >  secret-staging.yml"
-                      }
-                      
                       if (configMap!=""){
                          sh "oc create -f cm-staging.yml -n ${projectTarget} || true"
                       }
                       if (secretDb!=""){
-                         sh "oc create -f  secret-staging.yml -n ${projectTarget} || true"
+                        //  sh "oc create -f  secret-staging.yml -n ${projectTarget} || true"
+                        sh "oc get secret ${secretDb} -n ${projectSource} -o template --template='{{.data.USERNAME}}'|base64 -d|tr -d '\n' > user.secret"
+                        sh "oc get secret ${secretDb} -n ${projectSource} -o template --template='{{.data.PASSWORD}}'|base64 -d|tr -d '\n' > pass.secret"
+                        sh "oc get secret ${secretDb} -n ${projectSource} -o template --template='{{.data.HOSTNAME}}'|base64 -d|tr -d '\n' > hostname.secret"
+                        def user=readFile('user.secret')
+                        def pass=readFile('pass.secret')
+                        def host=readFile('hostname.secret')
+                        sh "rm -f *.secret"
+                        sh "oc create secret generic ${appName}-db-secret -n ${projectTarget} --from-literal=USERNAME=${user} --from-literal=PASSWORD=${pass} --from-literal=HOSTNAME=${host} || true"
                       }
                       //create sakti.properties configmaps
                       sh "oc create configmap scheduler-config-file --from-file=sakti.properties -n ${projectTarget} || true"
@@ -259,8 +163,8 @@ objects:
                       }
 
                       if (dcNotPresent){
-                        sh "oc tag ${projectSource}/${sourceAppName}:latest ${projectTarget}/${appName}:latest"
-                        sh "oc new-app ${appName}:latest --name=${appName} -n ${projectTarget} || true"
+                        
+                        sh "oc new-app ${projectSource}/${sourceAppName}:latest --name=${appName} -n ${projectTarget} || true"
                         sh "oc rollout cancel dc/${appName} -n ${projectTarget} || true"
                         sh "oc rollout pause dc/${appName} -n ${projectTarget}"  
                         //mounting the configmaps
@@ -269,84 +173,7 @@ objects:
                           sh "oc set env --from=configmap/${configMap} dc/${appName} -n ${projectTarget}"
                         }
                         if (secretDb !=  ""){
-                          sh "oc set env --from=secret/${secretDb} --prefix=EXTERNAL_DATABASE_ dc/${appName} -n ${projectTarget}"
-                        }
-                        //apply timezone
-                        sh "oc set env dc/${appName} TZ=Asia/Bangkok -n ${projectTarget}"
-                        
-                        //setting resources and autoscale
-                        sh "oc set resources DeploymentConfig ${appName} -n ${projectTarget} -c ${appName} --requests='cpu=500m,memory=1024Mi' --limits='cpu=2000m,memory=6Gi'"
-                        
-                        //setting healthcheck
-                        sh "oc set probe dc/${appName} -n ${projectTarget} --initial-delay-seconds=10 --timeout-seconds=1 --readiness -- /bin/bash -c /opt/eap/bin/readinessProbe.sh"
-                        sh "oc set probe dc/${appName} -n ${projectTarget} --initial-delay-seconds=90 --timeout-seconds=1 --liveness -- /bin/bash -c /opt/eap/bin/livenessProbe.sh"
-                        
-                        sh "oc rollout resume dc/${appName} -n ${projectTarget}"  
-                        sh "oc rollout status dc/${appName} -w -n ${projectTarget}"
-
-                        //sh "oc expose svc ${appName} -n ${projectTarget}"
-                        sh "oc expose svc ${appName} -n ${projectTarget} || true"
-
-                        sh "oc get route/${appName} -o jsonpath='{.spec.host}' -n ${projectTarget} > ext.temp"
-                        def ext=readFile("ext.temp")
-                        sh "oc set env dc/${appName} EXTERNAL_ROUTE_NAME=${ext} -n ${projectTarget}"
-                        //increase time out
-                        sh "oc annotate route/${appName} -n ${projectTarget} --overwrite haproxy.router.openshift.io/timeout=240000ms"
-                        
-                      }else{
-                        sh "oc rollout pause dc/${appName} -n ${projectTarget}"  
-                        sh "oc tag ${projectSource}/${sourceAppName}:latest ${projectTarget}/${appName}:latest"
-                        
-                        //setting healthcheck
-                        sh "oc set probe dc/${appName} -n ${projectTarget} --initial-delay-seconds=10 --timeout-seconds=1 --readiness -- /bin/bash -c /opt/eap/bin/readinessProbe.sh"
-                        sh "oc set probe dc/${appName} -n ${projectTarget} --initial-delay-seconds=90 --timeout-seconds=1 --liveness -- /bin/bash -c /opt/eap/bin/livenessProbe.sh"
-                        
-                        sh "oc rollout resume dc/${appName} -n ${projectTarget}"  
-                        sh "oc rollout status dc/${appName} -w -n ${projectTarget}"
-                        echo "just update the image"
-                      }
-                    }
-                    stage ("Configuring DR") {
-                      withCredentials([[$class: 'UsernamePasswordMultiBinding', credentialsId: '${NAMESPACE_CICD}-${PIPELINE_NAME}-dest-dr-cluster-secret', passwordVariable: 'DEST_TOKEN', usernameVariable: 'UNUSED']]){
-                        sh "oc login ${ocpDrDest} --token=${DEST_TOKEN} --insecure-skip-tls-verify=true"
-                      }
-
-                      if (configMap!=""){
-                         sh "oc export cm/${configMap} -n ${projectSource} >  cm-staging.yml"
-                      }
-
-                      if (secretDbDr!=""){
-                         sh "oc export secret/${secretDbDr} -n ${projectSource} >  secret-staging.yml"
-                      }
-                      
-                      if (configMap!=""){
-                         sh "oc create -f cm-staging.yml -n ${projectTarget} || true"
-                      }
-                      if (secretDbDr!=""){
-                         sh "oc create -f  secret-staging.yml -n ${projectTarget} || true"
-                      }
-                      //create sakti.properties configmaps
-                      sh "oc create configmap scheduler-config-file --from-file=sakti.properties -n ${projectTarget} || true"
-                    }
-                    stage("Deploying DR") {
-                      def dcNotPresent = false
-                      try {
-                        sh "oc get dc ${appName} -o jsonpath='{.metadata.name}' -n ${projectTarget}"
-                      }catch(err){
-                        dcNotPresent = true
-                      }
-
-                      if (dcNotPresent){
-                        sh "oc tag ${projectSource}/${sourceAppName}:latest ${projectTarget}/${appName}:latest"
-                        sh "oc new-app ${appName}:latest --name=${appName} -n ${projectTarget} || true"
-                        sh "oc rollout cancel dc/${appName} -n ${projectTarget} || true"
-                        sh "oc rollout pause dc/${appName} -n ${projectTarget}"  
-                        sh "oc set volume dc/${appName} -n ${projectTarget} --add --overwrite --name=config-scheduler-volume -t configmap --configmap-name=scheduler-config-file --mount-path=/opt/eap/standalone/configuration/sakti.properties --sub-path=sakti.properties || true"
-                        if (configMap !=  ""){
-                          sh "oc set env --from=configmap/${configMap} dc/${appName} -n ${projectTarget}"
-                        }
-                        if (secretDbDr !=  ""){
-                          sh "oc set env --from=secret/${secretDbDr} --prefix=EXTERNAL_DATABASE_ dc/${appName} -n ${projectTarget}"
+                          sh "oc set env --from=secret/${appName}-db-secret --prefix=EXTERNAL_DATABASE_ dc/${appName} -n ${projectTarget}"
                         }
                         //apply timezone
                         sh "oc set env dc/${appName} TZ=Asia/Bangkok -n ${projectTarget}"
@@ -359,8 +186,8 @@ objects:
                         sh "oc set probe dc/${appName} -n ${projectTarget} --initial-delay-seconds=90 --timeout-seconds=1 --liveness -- /bin/bash -c /opt/eap/bin/livenessProbe.sh"
                         
                         //sh "oc expose svc ${appName} -n ${projectTarget}"
-                        sh "oc expose svc ${appName} -n ${projectTarget} || true"
-                        
+                        sh "oc expose svc ${appName} --port=8080 -n ${projectTarget} || true"
+
                         sh "oc get route/${appName} -o jsonpath='{.spec.host}' -n ${projectTarget} > ext.temp"
                         def ext=readFile("ext.temp")
                         sh "oc set env dc/${appName} EXTERNAL_ROUTE_NAME=${ext} -n ${projectTarget}"
@@ -372,7 +199,6 @@ objects:
                         
                       }else{
                         sh "oc rollout pause dc/${appName} -n ${projectTarget}"  
-                        sh "oc tag ${projectSource}/${sourceAppName}:latest ${projectTarget}/${appName}:latest"
                         
                         //setting healthcheck
                         sh "oc set probe dc/${appName} -n ${projectTarget} --initial-delay-seconds=10 --timeout-seconds=1 --readiness -- /bin/bash -c /opt/eap/bin/readinessProbe.sh"
@@ -382,8 +208,6 @@ objects:
                         sh "oc rollout status dc/${appName} -w -n ${projectTarget}"
                         echo "just update the image"
                       }
-                      //scale down the scheduler at dr
-                      sh "oc scale dc/${appName} --replicas=0 -n ${projectTarget} ||true"
                     }
                   }
               }

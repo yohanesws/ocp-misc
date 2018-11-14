@@ -239,17 +239,18 @@ objects:
                         sh "oc set probe dc/${appName} -n ${projectTarget} --initial-delay-seconds=10 --timeout-seconds=1 --readiness -- /bin/bash -c /opt/eap/bin/readinessProbe.sh"
                         sh "oc set probe dc/${appName} -n ${projectTarget} --initial-delay-seconds=90 --timeout-seconds=1 --liveness -- /bin/bash -c /opt/eap/bin/livenessProbe.sh"
                         
-                        sh "oc rollout resume dc/${appName} -n ${projectTarget}"  
-                        sh "oc rollout status dc/${appName} -w -n ${projectTarget}"
 
                         //sh "oc expose svc ${appName} -n ${projectTarget}"
-                        sh "oc expose svc ${appName} -n ${projectTarget} || true"
+                        sh "oc expose svc ${appName} --port=8080 -n ${projectTarget} || true"
 
                         sh "oc get route/${appName} -o jsonpath='{.spec.host}' -n ${projectTarget} > ext.temp"
                         def ext=readFile("ext.temp")
                         sh "oc set env dc/${appName} EXTERNAL_ROUTE_NAME=${ext} -n ${projectTarget}"
                         //increase time out
                         sh "oc annotate route/${appName} -n ${projectTarget} --overwrite haproxy.router.openshift.io/timeout=240000ms"
+                        
+                        sh "oc rollout resume dc/${appName} -n ${projectTarget}"  
+                        sh "oc rollout status dc/${appName} -w -n ${projectTarget}"
                         
                       }else{
                         sh "oc rollout pause dc/${appName} -n ${projectTarget}"  
@@ -317,7 +318,7 @@ objects:
                         sh "oc set probe dc/${appName} -n ${projectTarget} --initial-delay-seconds=90 --timeout-seconds=1 --liveness -- /bin/bash -c /opt/eap/bin/livenessProbe.sh"
                         
                         //sh "oc expose svc ${appName} -n ${projectTarget}"
-                        sh "oc expose svc ${appName} -n ${projectTarget} || true"
+                        sh "oc expose svc ${appName} --port=8080 -n ${projectTarget} || true"
                         
                         sh "oc get route/${appName} -o jsonpath='{.spec.host}' -n ${projectTarget} > ext.temp"
                         def ext=readFile("ext.temp")

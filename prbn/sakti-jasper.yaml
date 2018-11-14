@@ -1,18 +1,69 @@
 apiVersion: v1
 kind: Template
+labels:
+  template: sakti-jasper-template
+message: >-
+  A Jasper server will be automatically instantiated in this project to manage
+
+  if pod can't be run because of permission 
+
+  Please run command below as cluster local
+  
+  oc adm policy add-scc-to-user anyuid -z jasper -n <NAMEPSACE>
 metadata:
-  creationTimestamp: null
-  name: sakti-jasper
+  annotations:
+    description: >-
+      This template For deploy jasper server for sakti
+    openshift.io/display-name: Sakti Jasper
+    tags: 'instant-app,jasper,sakti'
+  name: sakti-jasper-template
+parameters:
+  - description: Japser Name
+    displayName: Pipeline Name
+    name: APP_NAME
+    required: true
+    value: sakti-jasper
+  - description: Image and tag of jasper to run
+    displayName: Jasper Image
+    name: JASPER_IMAGE
+    required: true
+    value: sakti-jasper:latest
+  - description: Image and tag of jasper namespace
+    displayName: Jasper Image Namespace
+    name: NAMESPACE_IMAGE
+    required: true
+    value: openshift
+  - description: Hostname of database server for jasper
+    displayName: DATABASE HOST
+    name: DB_HOST
+    required: true
+    value: '10.242.99.42'
+  - description: Port of database server for jasper
+    displayName: DATABASE HOST
+    name: DB_PORT
+    required: true
+    value: '5432'
+  - description: Username of database server for jasper
+    displayName: DATABASE USERNAME
+    name: DB_USERNAME
+    required: true
+    value: 'postgres'
+  - description: password of database server for jasper
+    displayName: DATABASE PASSWORD
+    name: DB_PASSWORD
+    required: true
+    value: 'postgres'
+  - description: Schema of database server for jasper
+    displayName: DATABASE Schema
+    name: DB_SCHEMA
+    required: true
 objects:
 - apiVersion: v1
   kind: Service
   metadata:
-    annotations:
-      openshift.io/generated-by: OpenShiftWebConsole
-    creationTimestamp: null
     labels:
-      app: sakti-jasper
-    name: sakti-jasper
+      app: ${APP_NAME}
+    name: ${APP_NAME}
   spec:
     ports:
     - name: 8080-tcp
@@ -20,7 +71,7 @@ objects:
       protocol: TCP
       targetPort: 8080
     selector:
-      deploymentconfig: sakti-jasper
+      deploymentconfig: ${APP_NAME}
     sessionAffinity: None
     type: ClusterIP
   status:
@@ -28,25 +79,59 @@ objects:
 - apiVersion: v1
   kind: ServiceAccount
   metadata:
-    creationTimestamp: null
-    name: builder
-- apiVersion: v1
-  kind: ServiceAccount
-  metadata:
-    creationTimestamp: null
-    name: default
-- apiVersion: v1
-  kind: ServiceAccount
-  metadata:
-    creationTimestamp: null
-    name: deployer
-- apiVersion: v1
-  kind: ServiceAccount
-  metadata:
-    creationTimestamp: null
     name: jasper
 - apiVersion: v1
   data:
+    context.xml: |
+      <Context path="/jasperserver" 
+                  debug="5" reloadable="false" crossContext="true">
+                  
+              <!-- maxActive: Maximum number of dB connections in pool. Make sure you
+                  configure your mysqld max_connections large enough to handle
+                  all of your db connections. Set to 0 for no limit.
+              -->
+              <!-- maxIdle: Maximum number of idle dB connections to retain in pool.
+                  Set to -1 for no limit.  See also the DBCP documentation on this
+                  and the minEvictableIdleTimeMillis configuration parameter.
+              -->
+              <!-- maxWait: Maximum time to wait for a dB connection to become available
+                  in ms, in this example 10 seconds. An Exception is thrown if
+                  this timeout is exceeded.  Set to -1 to wait indefinitely.
+              -->
+
+          <!-- Additional properties for specifying a validation query to help   -->
+          <!-- with reconnect/timeout errors. Exact syntax will vary with        -->
+          <!-- database type (this tested on mysql).                             -->
+          <!--                                                                   -->
+          <!--   validationQuery="select 1"                                      -->
+          <!--   testOnBorrow="true"                                             -->
+          <!--   (and add to url property): &amp;autoReconnectForPools=true      -->
+              
+          <Resource name="jdbc/jasperserver" auth="Container" type="javax.sql.DataSource"
+              maxActive="100" maxIdle="30" maxWait="10000"
+              username="${DB_USERNAME}" password="${DB_PASSWORD}" 
+              driverClassName="org.postgresql.Driver"
+              validationQuery="SELECT 1"
+              testOnBorrow="true"
+              url="jdbc:postgresql://${DB_HOST}:${DB_PORT}/${DB_SCHEMA}?useUnicode=true&amp;characterEncoding=UTF-8&amp;autoReconnect=true&amp;autoReconnectForPools=true"/>
+
+          <Resource name="jdbc/sugarcrm" auth="Container" type="javax.sql.DataSource"
+              maxActive="100" maxIdle="30" maxWait="10000"
+              username="jasperdb" password="password" 
+              driverClassName="org.postgresql.Driver"
+              validationQuery="SELECT 1"
+              testOnBorrow="true"
+              url="jdbc:postgresql://10.242.99.42:5432/sugarcrm?useUnicode=true&amp;characterEncoding=UTF-8&amp;autoReconnect=true&amp;autoReconnectForPools=true"/>
+
+          <Resource name="jdbc/foodmart" auth="Container" type="javax.sql.DataSource"
+              maxActive="100" maxIdle="30" maxWait="10000"
+              username="jasperdb" password="password" 
+              driverClassName="org.postgresql.Driver"
+              validationQuery="SELECT 1"
+              testOnBorrow="true"
+              url="jdbc:postgresql://10.242.99.42:5432/foodmart?useUnicode=true&amp;characterEncoding=UTF-8&amp;autoReconnect=true&amp;autoReconnectForPools=true"/>
+              
+      </Context>
     default_master.properties: |-
       ################################################################################
       #                                                                              #
@@ -111,18 +196,18 @@ objects:
 
       # database location and connection settings
 
-      dbHost=10.242.99.42
-      dbUsername=postgres
-      dbPassword=postgres
+      dbHost=${DB_HOST}
+      dbUsername=${DB_USERNAME}
+      dbPassword=${DB_PASSWORD}
 
 
       # additional database parameters
       # (uncomment these if you want non-default settings)
 
-      dbPort=5432
+      dbPort=${DB_PORT}
 
       # JasperServer db name, sample db names
-       js.dbName=jasper_eut
+       js.dbName=${DB_SCHEMA}
       # sugarcrm.dbName=sugarcrm
       # foodmart.dbName=foodmart
 
@@ -148,26 +233,16 @@ objects:
       openshift.io/host.generated: "true"
     creationTimestamp: null
     labels:
-      app: sakti-jasper
-    name: sakti-jasper
+      app: ${APP_NAME}
+    name: ${APP_NAME}
   spec:
-    host: sakti-jasper-sakti-eut.ocpprddjpb.kemenkeu.go.id
     port:
       targetPort: 8080-tcp
     to:
       kind: Service
-      name: sakti-jasper
+      name: ${APP_NAME}
       weight: 100
     wildcardPolicy: None
-  status:
-    ingress:
-    - conditions:
-      - lastTransitionTime: 2018-11-14T02:57:51Z
-        status: "True"
-        type: Admitted
-      host: sakti-jasper-sakti-eut.ocpprddjpb.kemenkeu.go.id
-      routerName: router
-      wildcardPolicy: None
 - apiVersion: v1
   kind: DeploymentConfig
   metadata:
@@ -176,13 +251,13 @@ objects:
     creationTimestamp: null
     generation: 8
     labels:
-      app: sakti-jasper
-    name: sakti-jasper
+      app: ${APP_NAME}
+    name: ${APP_NAME}
   spec:
     replicas: 1
     selector:
-      app: sakti-jasper
-      deploymentconfig: sakti-jasper
+      app: ${APP_NAME}
+      deploymentconfig: ${APP_NAME}
     strategy:
       activeDeadlineSeconds: 21600
       resources: {}
@@ -199,13 +274,13 @@ objects:
           openshift.io/generated-by: OpenShiftWebConsole
         creationTimestamp: null
         labels:
-          app: sakti-jasper
-          deploymentconfig: sakti-jasper
+          app: ${APP_NAME}
+          deploymentconfig: ${APP_NAME}
       spec:
         containers:
-        - image: docker-registry.default.svc:5000/openshift/sakti-jasper@sha256:d8af21781e5507505bc470e954274625eea6272ab5517f74ab3a570b18350fca
+        - image: 
           imagePullPolicy: Always
-          name: sakti-jasper
+          name: ${APP_NAME}
           ports:
           - containerPort: 8080
             protocol: TCP
@@ -216,6 +291,14 @@ objects:
           - mountPath: /home/jasper/jasper-server/buildomatic/default_master.properties
             name: config-volume
             subPath: default_master.properties
+          - mountPath: >-
+              /home/jasper/jasper-server/apache-tomcat/webapps/jasperserver/META-INF/context.xml
+            name: context-volume
+            subPath: context.xml
+          - mountPath: >-
+              /home/jasper/jasper-server/apache-tomcat/conf/Catalina/localhost/jasperserver.xml
+            name: jasper-config-vol
+            subPath: jasperserver.xml
         dnsPolicy: ClusterFirst
         restartPolicy: Always
         schedulerName: default-scheduler
@@ -228,6 +311,17 @@ objects:
             defaultMode: 420
             name: jasper-conf
           name: config-volume
+        - configMap:
+            defaultMode: 420
+            name: jasper-conf
+          name: context-volume
+        - configMap:
+            defaultMode: 420
+            items:
+              - key: context.xml
+                path: jasperserver.xml
+            name: jasper-conf
+          name: jasper-config-vol
     test: false
     triggers:
     - type: ConfigChange
@@ -237,14 +331,6 @@ objects:
         - sakti-jasper
         from:
           kind: ImageStreamTag
-          name: sakti-jasper:latest
-          namespace: openshift
-        lastTriggeredImage: docker-registry.default.svc:5000/openshift/sakti-jasper@sha256:d8af21781e5507505bc470e954274625eea6272ab5517f74ab3a570b18350fca
+          name: ${JASPER_IMAGE}
+          namespace: ${NAMESPACE_IMAGE}
       type: ImageChange
-  status:
-    availableReplicas: 0
-    latestVersion: 0
-    observedGeneration: 0
-    replicas: 0
-    unavailableReplicas: 0
-    updatedReplicas: 0
