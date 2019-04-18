@@ -198,7 +198,7 @@ objects:
                       if (secretDb!=""){
                          sh "oc export secret/${secretDb} -n ${projectSource} >  secret-staging.yml"
                       }
-                      
+                      sh "oc policy add-role-to-user system:image-puller system:serviceaccount:${projectTarget}:default -n ${projectSource} || true"
                       if (configMap!=""){
                          sh "oc create -f cm-staging.yml -n ${projectTarget} || true"
                       }
@@ -217,8 +217,8 @@ objects:
                       }
 
                       if (dcNotPresent){
-                        sh "oc tag ${projectSource}/${sourceAppName}:latest ${projectTarget}/${appName}:latest"
-                        sh "oc new-app ${appName}:latest --name=${appName} -n ${projectTarget} || true"
+                        //sh "oc tag ${projectSource}/${sourceAppName}:latest ${projectTarget}/${appName}:latest"
+                        sh "oc new-app ${projectSource}/${sourceAppName}:latest --name=${appName} -n ${projectTarget} || true"
                         sh "oc rollout cancel dc/${appName} -n ${projectTarget} || true"
                         sh "oc rollout pause dc/${appName} -n ${projectTarget}"  
                         //mounting the configmaps
@@ -254,7 +254,7 @@ objects:
                         
                       }else{
                         sh "oc rollout pause dc/${appName} -n ${projectTarget}"  
-                        sh "oc tag ${projectSource}/${sourceAppName}:latest ${projectTarget}/${appName}:latest"
+                        //sh "oc tag ${projectSource}/${sourceAppName}:latest ${projectTarget}/${appName}:latest"
                         
                         //setting healthcheck
                         sh "oc set probe dc/${appName} -n ${projectTarget} --initial-delay-seconds=10 --timeout-seconds=1 --readiness -- /bin/bash -c /opt/eap/bin/readinessProbe.sh"
@@ -273,11 +273,11 @@ objects:
                       if (configMap!=""){
                          sh "oc export cm/${configMap} -n ${projectSource} >  cm-staging.yml"
                       }
-
+                      
                       if (secretDbDr!=""){
                          sh "oc export secret/${secretDbDr} -n ${projectSource} >  secret-staging.yml"
                       }
-                      
+                      sh "oc policy add-role-to-user system:image-puller system:serviceaccount:${projectTarget}:default -n ${projectSource} || true"
                       if (configMap!=""){
                          sh "oc create -f cm-staging.yml -n ${projectTarget} || true"
                       }
@@ -296,8 +296,8 @@ objects:
                       }
 
                       if (dcNotPresent){
-                        sh "oc tag ${projectSource}/${sourceAppName}:latest ${projectTarget}/${appName}:latest"
-                        sh "oc new-app ${appName}:latest --name=${appName} -n ${projectTarget} || true"
+                        //sh "oc tag ${projectSource}/${sourceAppName}:latest ${projectTarget}/${appName}:latest"
+                        sh "oc new-app ${projectSource}/${sourceAppName}:latest --name=${appName} -n ${projectTarget} || true"
                         sh "oc rollout cancel dc/${appName} -n ${projectTarget} || true"
                         sh "oc rollout pause dc/${appName} -n ${projectTarget}"  
                         sh "oc set volume dc/${appName} -n ${projectTarget} --add --overwrite --name=config-scheduler-volume -t configmap --configmap-name=scheduler-config-file --mount-path=/opt/eap/standalone/configuration/sakti.properties --sub-path=sakti.properties || true"
@@ -331,7 +331,7 @@ objects:
                         
                       }else{
                         sh "oc rollout pause dc/${appName} -n ${projectTarget}"  
-                        sh "oc tag ${projectSource}/${sourceAppName}:latest ${projectTarget}/${appName}:latest"
+                        //sh "oc tag ${projectSource}/${sourceAppName}:latest ${projectTarget}/${appName}:latest"
                         
                         //setting healthcheck
                         sh "oc set probe dc/${appName} -n ${projectTarget} --initial-delay-seconds=10 --timeout-seconds=1 --readiness -- /bin/bash -c /opt/eap/bin/readinessProbe.sh"

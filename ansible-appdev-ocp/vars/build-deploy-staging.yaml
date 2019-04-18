@@ -1,0 +1,5 @@
+#sample vars
+env: uat
+source_env: sit
+component: ocp-test
+version: 1

@@ -1,0 +1,35 @@
+---
+  - hosts: masters-prod[0],masters-dr[0]
+    remote_user: root
+    vars_files:
+      - vars/release-prod-dr.yaml
+    tasks:
+    - debug:
+        var: inventory_hostname
+        verbosity: 2
+    - debug:
+        var: admin
+        verbosity: 2
+    - debug:
+        var: deploy
+        verbosity: 2
+    - name: move ocp image to prod
+      command: |
+        skopeo copy --remove-signatures --src-creds openshift:{{ docker_registry_nonprod_token }} --src-tls-verify=false --dest-creds openshift:{{docker_registry_prod_token}}  --dest-tls-verify=false docker://{{docker_registry_nonprod_url}}/{{source_project}}/{{component}}:{{version}} docker://{{docker_registry_prod_url}}/{{project}}/{{component}}:{{version}}
+      when: inventory_hostname in groups['masters-prod']
+    - name: move ocp image to DR
+      command: |
+        skopeo copy --remove-signatures --src-creds openshift:{{ docker_registry_nonprod_token }} --src-tls-verify=false --dest-creds openshift:{{docker_registry_dr_token}}  --dest-tls-verify=false docker://{{docker_registry_nonprod_url}}/{{source_project}}/{{component}}:{{version}} docker://{{docker_registry_dr_url}}/{{project}}/{{component}}:{{version}}
+      when: inventory_hostname in groups['masters-dr']
+    - name: ocp login
+      command: "oc login --token={{ocp_token}}"
+      when: admin is not defined
+    - name: ocp login
+      command: "oc login -u system:admin"
+      when: admin is defined and admin
+    - name: ocp tag move image to latest
+      command: "oc tag {{project}}/{{component}}:{{version}} {{project}}/{{component}}:latest"
+    - name: ocp deploy app component one time
+      command: "oc new-app {{component}} -n {{project}}"
+      ignore_errors: True
+      when: deploy is defined and deploy

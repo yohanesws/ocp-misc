@@ -1,0 +1,54 @@
+---
+- hosts: masters[0]
+  remote_user: root
+#  vars_files:
+#   - vars/build-deploy-uat.yaml
+  tasks:
+  - debug:
+      var: admin
+      verbosity: 2
+  - debug:
+      var: build
+      verbosity: 2
+  - name: ocp login
+    command: "oc login --token={{ocp_token}}"
+    when: admin is not defined
+  - name: ocp login
+    command: "oc login -u system:admin"
+    when: admin is defined and admin
+  - name: create temporary folder
+    tempfile:
+      state: directory
+      suffix: tempbuildfolder
+    register: buildfolder
+    when: build is defined and build
+  - name: download the file
+    get_url:
+      url: "{{ maven_repo_url }}/{{ jar_path }}"
+      url_username: "{{ maven_repo_user }}"
+      url_password: "{{ maven_repo_pass}}"
+      dest: "{{ buildfolder.path }}"
+    when: build is defined and build
+  - name: create env at ocp
+    command: "oc new-project {{app_name}}-{{env}}"
+    ignore_errors: True
+  - name: ocp create new build one time
+    command: "oc new-build {{builder_name}} --name {{component}} --binary -n {{app_name}}-{{env}}"
+    ignore_errors: True
+    when: build is defined and build
+  - name: ocp create image
+    command: "oc start-build {{component}} --from-dir={{ buildfolder.path }} -w -n {{app_name}}-{{env}}"
+    when: build is defined and build 
+  - name: ocp versioning the image
+    command: "oc tag  {{app_name}}-{{env}}/{{component}}:latest {{app_name}}-{{env}}/{{component}}:{{version}}"
+    when: build is defined and build
+  - name: ocp move the image
+    command: "oc tag  {{app_name}}-{{source_env}}/{{component}}:{{version}} {{app_name}}-{{env}}/{{component}}:{{version}}"
+    when: source_env is defined
+  - name: ocp tag move image to latest
+    command: "oc tag {{app_name}}-{{env}}/{{component}}:{{version}} {{app_name}}-{{env}}/{{component}}:latest"
+    when: source_env is defined
+  - name: ocp deploy app component one time
+    command: "oc new-app {{component}} -n {{app_name}}-{{env}}"
+    ignore_errors: True
+    when: deploy is defined and deploy

@@ -1,0 +1,7 @@
+#sample vars
+jar_path: maven_gtx/com/yourcompany/newapp/newapp-springboot/1.0.0-SNAPSHOT/newapp-springboot-1.0.0-20190411.024105-1.jar
+env: sit
+component: ocp-test
+version: 1
+build: yes
+deploy: yes

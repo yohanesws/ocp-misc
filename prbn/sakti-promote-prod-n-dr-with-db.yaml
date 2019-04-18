@@ -118,6 +118,11 @@ objects:
                   def projectJasper = "${JASPER_NAMESPACE}"
                   def jasperAppName = "${JASPER_APP_NAME}"
                   def localToken =""
+                  def sftpHost="${SFTP_HOST}"
+                  def sftpPort="${SFTP_PORT}"
+                  def sftpUser="${SFTP_USER}"
+                  def sftpPass="${SFTP_PASS}"
+                  def sftpDir="${SFTP_DIR}"
 
                   node () {
                     stage("Preparing"){
@@ -385,12 +390,12 @@ objects:
                         sh "echo 'jasperreport.userName=jasperadmin' >> ${fileWithoutExt}/sakti2-config.properties"
                         sh "echo 'jasperreport.password=jasperadmin' >> ${fileWithoutExt}/sakti2-config.properties"
                         sh "echo 'sftp.isLocal=false' >> ${fileWithoutExt}/sakti2-config.properties"
-                        sh "echo 'sftp.directory=/home/spanftp2/sakti_app/adk' >> ${fileWithoutExt}/sakti2-config.properties"
-                        sh "echo 'sftp.password=spanftp2' >> ${fileWithoutExt}/sakti2-config.properties"
-                        sh "echo 'sftp.userName=spanftp2' >> ${fileWithoutExt}/sakti2-config.properties"
+                        sh "echo 'sftp.directory=${sftpDir}' >> ${fileWithoutExt}/sakti2-config.properties"
+                        sh "echo 'sftp.password=${sftpUser}' >> ${fileWithoutExt}/sakti2-config.properties"
+                        sh "echo 'sftp.userName=${sftpPass}' >> ${fileWithoutExt}/sakti2-config.properties"
                         //sftp url changes
-                        sh "echo 'sftp.url=10.100.88.41' >> ${fileWithoutExt}/sakti2-config.properties"
-                        sh "echo 'sftp.port=22' >> ${fileWithoutExt}/sakti2-config.properties"
+                        sh "echo 'sftp.url=${sftpHost}' >> ${fileWithoutExt}/sakti2-config.properties"
+                        sh "echo 'sftp.port=${sftpPort}' >> ${fileWithoutExt}/sakti2-config.properties"
                         sh "echo 'database.type=oracle' >> ${fileWithoutExt}/sakti2-config.properties"
                         
                         sh "rm -f *.temp"
@@ -559,6 +564,31 @@ parameters:
     name: NAMESPACE_CICD
     required: true
     value: devops
+  - description: Sakti SFTP
+    displayName: SFTP HOST
+    name: SFTP_HOST
+    required: true
+    value: "10.100.88.41"
+  - description: Sakti SFTP
+    displayName: SFTP User
+    name: SFTP_USER
+    required: true
+    value: "spanftp2"
+  - description: Sakti SFTP
+    displayName: SFTP Password
+    name: SFTP_PASS
+    required: true
+    value: "spanftp2"
+  - description: Sakti SFTP
+    displayName: SFTP Direktori
+    name: SFTP_DIR
+    required: true
+    value: "/home/spanftp2/sakti_app/adk"
+  - description: Sakti SFTP
+    displayName: SFTP PORT
+    name: SFTP_PORT
+    required: true
+    value: "22"
   - description: >-
       Github trigger secret.  A difficult to guess string encoded as part of the
       webhook URL.  Not encrypted.

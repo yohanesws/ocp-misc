@@ -1,0 +1,6 @@
+#sample vars
+project: gtx
+source_project: gtx-staging
+component: ocp-test
+version: 1
+deploy: true

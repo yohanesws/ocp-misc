@@ -90,6 +90,11 @@ objects:
                   def targetSaktiEarNexusURL = "${TARGET_SAKTI_EAP_NEXUS_URL}"
                   def projectJasper = "${JASPER_NAMESPACE}"
                   def jasperAppName = "${JASPER_APP_NAME}"
+                  def sftpHost="10.100.88.41"
+                  def sftpPort="22"
+                  def sftpUser="spanftp2"
+                  def sftpPass="spanftp2"
+                  def sftpDir="/home/spanftp2/sakti_app/adk"
 
                   node () {
                     stage("Preparing"){
@@ -244,19 +249,19 @@ objects:
                         sh "echo 'jasperreport.userName=jasperadmin' >> ${fileWithoutExt}/sakti2-config.properties"
                         sh "echo 'jasperreport.password=jasperadmin' >> ${fileWithoutExt}/sakti2-config.properties"
                         sh "echo 'sftp.isLocal=false' >> ${fileWithoutExt}/sakti2-config.properties"
-                        sh "echo 'sftp.directory=/home/spanftp2/sakti_app/adk' >> ${fileWithoutExt}/sakti2-config.properties"
-                        sh "echo 'sftp.password=spanftp2' >> ${fileWithoutExt}/sakti2-config.properties"
-                        sh "echo 'sftp.userName=spanftp2' >> ${fileWithoutExt}/sakti2-config.properties"
+                        sh "echo 'sftp.directory=${sftpDir}' >> ${fileWithoutExt}/sakti2-config.properties"
+                        sh "echo 'sftp.password=${sftpUser}' >> ${fileWithoutExt}/sakti2-config.properties"
+                        sh "echo 'sftp.userName=${sftpPass}' >> ${fileWithoutExt}/sakti2-config.properties"
                         //sftp url changes
-                        sh "echo 'sftp.url=10.100.88.41' >> ${fileWithoutExt}/sakti2-config.properties"
-                        sh "echo 'sftp.port=22' >> ${fileWithoutExt}/sakti2-config.properties"
+                        sh "echo 'sftp.url=${sftpHost}' >> ${fileWithoutExt}/sakti2-config.properties"
+                        sh "echo 'sftp.port=${sftpPort}' >> ${fileWithoutExt}/sakti2-config.properties"
                         sh "echo 'database.type=oracle' >> ${fileWithoutExt}/sakti2-config.properties"
                         
                         sh "rm -f *.temp"
                         sh "zip -r sakti-ui-${version.toUpperCase()}-${current}-from-${fileWithoutExt}.zip ${fileWithoutExt}"
                         sh "mv ${fileNameEAR} sakti-ear-${version.toUpperCase()}-${current}-from-${fileNameEAR}"
                         
-                        sh "curl -v -u ${user}:${pass} --upload-file sakti-ui-${version.toUpperCase()}-${current}-from-${fileNameUI} ${targetSaktiUiNexusURL}"
+                        sh "curl -v -u ${user}:${pass} --upload-file sakti-ui-${version.toUpperCase()}-${current}-from-${fileWithoutExt}.zip ${targetSaktiUiNexusURL}"
                         sh "curl -v -u ${user}:${pass} --upload-file sakti-ear-${version.toUpperCase()}-${current}-from-${fileNameEAR} ${targetSaktiEarNexusURL}"
                         echo "AAA"
                     }
