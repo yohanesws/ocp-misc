@@ -1,6 +1,7 @@
 ---
   - hosts: masters-prod[0],masters-dr[0]
-    remote_user: root
+    remote_user: ansibleadm
+    become: true
     vars_files:
       - vars/release-prod-dr.yaml
     tasks:
